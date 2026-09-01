@@ -1,0 +1,15 @@
+{
+  "KPlugin": {
+    "Id": "NajsFold",
+    "Name": "Najs Fold",
+    "Description": "The default Najs wallpaper",
+    "Version": "0.1.0",
+    "License": "CC-BY-SA-4.0",
+    "Authors": [
+      {
+        "Name": "Najs Project"
+      }
+    ]
+  },
+  "X-KDE-PlasmaImageWallpaper-AccentColor": "#59D2FF"
+}

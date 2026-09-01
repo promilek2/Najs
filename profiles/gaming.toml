@@ -1,0 +1,12 @@
+version = 1
+name = "gaming"
+description = "Gaming runtime for supported x86-64 hardware"
+
+[packages]
+install = ["gamemode", "gamescope", "lib32-mesa", "mangohud", "steam", "vulkan-icd-loader"]
+
+[services]
+enable = []
+
+[configuration]
+managed_files = []

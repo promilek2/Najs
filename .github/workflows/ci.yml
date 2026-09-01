@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+      - run: ./najs-dev test
+
+  iso:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./najs-dev build iso

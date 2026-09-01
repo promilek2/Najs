@@ -1,0 +1,7 @@
+$1        NN        NN
+$1        NNNN      NN
+$1        NN  NN    NN
+$1        NN    NN  NN
+$1        NN      NNNN
+$1        NN        NN
+$2          NAJS FOLD

@@ -1,0 +1,10 @@
+NAME="Najs"
+PRETTY_NAME="Najs 0.1 Development"
+ID=najs
+ID_LIKE=arch
+BUILD_ID=development
+ANSI_COLOR="38;2;89;210;255"
+HOME_URL="https://github.com/najs-os/najs"
+DOCUMENTATION_URL="https://github.com/najs-os/najs"
+BUG_REPORT_URL="https://github.com/najs-os/najs/issues"
+LOGO=najs

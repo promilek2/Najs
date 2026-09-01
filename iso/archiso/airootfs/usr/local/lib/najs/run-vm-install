@@ -1,0 +1,232 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly serial=/dev/ttyS0
+readonly disk_link=/dev/disk/by-id/virtio-NAJS_TEST_DISK
+readonly config_fw=/sys/firmware/qemu_fw_cfg/by_name/opt/najs/install-config/raw
+readonly creds_fw=/sys/firmware/qemu_fw_cfg/by_name/opt/najs/install-creds/raw
+readonly target=/mnt/archinstall
+readonly btrfs_top=/run/najs-install-btrfs
+
+exec > >(tee "${serial}") 2>&1
+
+fail() {
+  local code=$?
+  echo "NAJS_VM_INSTALL_FAILED status=${code}"
+  systemctl poweroff --no-block || true
+  exit "${code}"
+}
+trap fail ERR
+
+echo "NAJS_VM_INSTALL_BEGIN"
+
+if [[ ! -e "${disk_link}" ]]; then
+  echo "Refusing installation: the NAJS_TEST_DISK VirtIO device is absent"
+  false
+fi
+disk="$(readlink -f "${disk_link}")"
+readonly disk
+if [[ "${disk}" != /dev/vda ]]; then
+  echo "Refusing installation: expected /dev/vda, found ${disk}"
+  false
+fi
+if (( $(blockdev --getsize64 "${disk}") < 32212254720 )); then
+  echo "Refusing installation: test disk is smaller than 30 GiB"
+  false
+fi
+
+nm-online --quiet --timeout=120
+install -d /run/najs-install "${target}" "${btrfs_top}"
+install -m600 "${config_fw}" /run/najs-install/config.json
+install -m600 "${creds_fw}" /run/najs-install/creds.json
+
+wipefs --all --force "${disk}"
+parted --script "${disk}" \
+  mklabel gpt \
+  mkpart ESP fat32 1MiB 2049MiB \
+  set 1 esp on \
+  name 1 NAJS_ESP \
+  mkpart NAJS_SYSTEM btrfs 2049MiB 100%
+partprobe "${disk}"
+udevadm settle
+
+readonly esp="${disk_link}-part1"
+readonly system="${disk_link}-part2"
+mkfs.fat -F 32 -n NAJS_ESP "${esp}"
+mkfs.btrfs --force --label NAJS_SYSTEM "${system}"
+
+mount "${system}" "${btrfs_top}"
+install -d "${btrfs_top}/roots"
+for subvolume in roots/initial home var-log var-cache var-tmp snapshots; do
+  btrfs subvolume create "${btrfs_top}/${subvolume}"
+done
+umount "${btrfs_top}"
+
+mount -o subvol=roots/initial,compress=zstd,noatime "${system}" "${target}"
+install -d "${target}/boot" "${target}/home" "${target}/var/log" \
+  "${target}/var/cache" "${target}/var/tmp"
+mount "${esp}" "${target}/boot"
+mount -o subvol=home,compress=zstd,noatime "${system}" "${target}/home"
+mount -o subvol=var-log,compress=zstd,noatime "${system}" "${target}/var/log"
+mount -o subvol=var-cache,compress=zstd,noatime "${system}" "${target}/var/cache"
+mount -o subvol=var-tmp,compress=zstd,noatime "${system}" "${target}/var/tmp"
+
+pacman-key --init
+pacman-key --populate archlinux
+archinstall \
+  --config /run/najs-install/config.json \
+  --creds /run/najs-install/creds.json \
+  --silent
+
+if ! mountpoint --quiet "${target}"; then
+  mount -o subvol=roots/initial,compress=zstd,noatime "${system}" "${target}"
+fi
+mountpoint --quiet "${target}/boot" || mount "${esp}" "${target}/boot"
+mountpoint --quiet "${target}/home" || mount -o subvol=home,compress=zstd,noatime "${system}" "${target}/home"
+mountpoint --quiet "${target}/var/log" || mount -o subvol=var-log,compress=zstd,noatime "${system}" "${target}/var/log"
+mountpoint --quiet "${target}/var/cache" || mount -o subvol=var-cache,compress=zstd,noatime "${system}" "${target}/var/cache"
+mountpoint --quiet "${target}/var/tmp" || mount -o subvol=var-tmp,compress=zstd,noatime "${system}" "${target}/var/tmp"
+NAJS_INSTALL_TEST=1 /usr/local/bin/najs-install --provision-only --target "${target}"
+
+install -d "${target}/etc/sddm.conf.d" "${target}/usr/local/lib/najs"
+cat >"${target}/etc/sddm.conf.d/99-najs-vm-test.conf" <<'EOF'
+[Autologin]
+User=najs-test
+Session=plasma.desktop
+Relogin=true
+EOF
+cat >"${target}/etc/systemd/system/najs-installed-vm-health.service" <<'EOF'
+[Unit]
+Description=Verify the installed Najs VM
+ConditionVirtualization=kvm
+After=sddm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/najs/report-installed-vm-health
+
+[Install]
+WantedBy=graphical.target
+EOF
+cat >"${target}/usr/local/lib/najs/report-installed-vm-health" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+sleep 45
+exec >/dev/ttyS0 2>&1
+health=ok
+echo "NAJS_INSTALLED_HEALTH_BEGIN"
+if [[ "$(findmnt --noheadings --output FSROOT / | xargs)" == /roots/initial ]]; then
+  echo "btrfs-generation: initial"
+else
+  echo "btrfs-generation: failed"
+  health=failed
+fi
+for unit in NetworkManager.service cups.service firewalld.service sddm.service; do
+  if systemctl is-active --quiet "${unit}"; then
+    echo "${unit}: active"
+  else
+    echo "${unit}: failed"
+    health=failed
+  fi
+done
+for unit in avahi-daemon.service bluetooth.service fstrim.timer najs-flatpak-setup.timer power-profiles-daemon.service vboxservice.service; do
+  if systemctl is-enabled --quiet "${unit}"; then
+    echo "${unit}: enabled"
+  else
+    echo "${unit}: failed"
+    health=failed
+  fi
+done
+for package in ark dolphin firewalld flatpak fwupd haruna libreoffice-fresh okular system-config-printer; do
+  if pacman -Q "${package}" >/dev/null; then
+    echo "package-${package}: installed"
+  else
+    echo "package-${package}: failed"
+    health=failed
+  fi
+done
+if firewall-cmd --state | grep -qx running; then
+  echo "firewall: running"
+else
+  echo "firewall: failed"
+  health=failed
+fi
+if lpstat -r | grep -qx 'scheduler is running'; then
+  echo "printing: ready"
+else
+  echo "printing: failed"
+  health=failed
+fi
+if /usr/bin/najs validate --manifest /etc/najs/manifest.toml; then
+  echo "najs-cli: ok"
+else
+  echo "najs-cli: failed"
+  health=failed
+fi
+if grep -qx 'ID=najs' /etc/os-release \
+  && [[ -r /usr/share/icons/hicolor/scalable/apps/najs.svg ]] \
+  && [[ -r /usr/share/wallpapers/Najs/contents/images/2560x1600.png ]]; then
+  echo "branding: ok"
+else
+  echo "branding: failed"
+  health=failed
+fi
+if fastfetch --version >/dev/null; then
+  echo "fastfetch: ok"
+else
+  echo "fastfetch: failed"
+  health=failed
+fi
+if [[ -r /usr/share/najs/welcome/main.qml ]] \
+  && [[ -x /usr/local/bin/najs-welcome-gui ]]; then
+  echo "najs-welcome: ok"
+else
+  echo "najs-welcome: failed"
+  health=failed
+fi
+if [[ -r /home/najs-test/.config/najs/branding-v1 ]]; then
+  echo "desktop-branding: ok"
+else
+  echo "desktop-branding: failed"
+  health=failed
+fi
+if /usr/bin/najs doctor; then
+  echo "najs-doctor: ok"
+else
+  echo "najs-doctor: failed"
+  health=failed
+fi
+if loginctl --no-legend list-sessions | grep -Eq "[[:space:]]1000[[:space:]]+najs-test[[:space:]]+seat0"; then
+  echo "plasma-session: active"
+else
+  echo "plasma-session: failed"
+  health=failed
+fi
+if bootctl is-installed; then
+  echo "systemd-boot: installed"
+else
+  echo "systemd-boot: failed"
+  health=failed
+fi
+if bootctl list --no-pager | grep -q Najs; then
+  echo "boot-branding: Najs"
+else
+  echo "boot-branding: failed"
+  health=failed
+fi
+if [[ "${health}" == ok ]]; then
+  echo "NAJS_INSTALLED_HEALTH_OK"
+else
+  echo "NAJS_INSTALLED_HEALTH_FAILED"
+fi
+echo "NAJS_INSTALLED_HEALTH_END"
+sleep 15
+systemctl poweroff
+EOF
+chmod 755 "${target}/usr/local/lib/najs/report-installed-vm-health"
+systemctl --root="${target}" enable najs-installed-vm-health.service
+
+sync
+echo "NAJS_VM_INSTALL_OK"
+sleep 5
+systemctl poweroff

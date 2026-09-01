@@ -1,0 +1,9 @@
+[General]
+AccentColor=89,210,255
+ColorScheme=BreezeDark
+
+[Icons]
+Theme=breeze-dark
+
+[KDE]
+LookAndFeelPackage=org.najs.desktop

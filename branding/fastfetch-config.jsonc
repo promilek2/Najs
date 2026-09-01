@@ -1,0 +1,39 @@
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "logo": {
+    "type": "file",
+    "source": "/usr/share/najs/fastfetch/logo.txt",
+    "color": {
+      "1": "38;2;89;210;255",
+      "2": "38;2;139;231;255"
+    },
+    "padding": {
+      "top": 1,
+      "right": 3
+    }
+  },
+  "display": {
+    "separator": "  >  ",
+    "color": {
+      "keys": "38;2;89;210;255",
+      "title": "38;2;139;231;255"
+    }
+  },
+  "modules": [
+    "title",
+    "separator",
+    { "type": "os", "key": "System" },
+    { "type": "command", "key": "Generation", "text": "sed -n 's/^NAJS_GENERATION=//p' /etc/najs-release | tr -d '\"'" },
+    { "type": "kernel", "key": "Kernel" },
+    { "type": "de", "key": "Desktop" },
+    { "type": "wm", "key": "Compositor" },
+    { "type": "terminal", "key": "Terminal" },
+    { "type": "shell", "key": "Shell" },
+    { "type": "packages", "key": "Packages" },
+    { "type": "uptime", "key": "Uptime" },
+    { "type": "memory", "key": "Memory" },
+    { "type": "disk", "key": "System disk", "folders": "/" },
+    "break",
+    "colors"
+  ]
+}

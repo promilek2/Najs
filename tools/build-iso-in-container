@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly root=/src
+readonly work=/tmp/najs-archiso
+readonly profile="${work}/profile"
+
+rm -rf "${work}"
+install -d "${profile}" "${root}/out"
+cp -a "${root}/iso/archiso/." "${profile}/"
+
+cd "${root}"
+cargo build --locked --release --package najs-cli
+install -Dm755 target/release/najs "${profile}/airootfs/usr/local/bin/najs"
+install -Dm644 profiles/*.toml -t "${profile}/airootfs/usr/share/najs/profiles"
+install -Dm755 installer/najs-install "${profile}/airootfs/usr/local/bin/najs-install"
+install -Dm644 installer/archinstall/config.json "${profile}/airootfs/usr/share/najs/installer/archinstall.json"
+install -Dm644 installer/najs-installer.desktop "${profile}/airootfs/usr/share/applications/najs-installer.desktop"
+
+install -Dm644 branding/logo.svg "${profile}/airootfs/usr/share/icons/hicolor/scalable/apps/najs.svg"
+install -Dm644 branding/logo.svg "${profile}/airootfs/usr/share/pixmaps/najs.svg"
+for size in 16 32 64 128 256; do
+  icon="${profile}/airootfs/usr/share/icons/hicolor/${size}x${size}/apps/najs.png"
+  install -d "$(dirname "${icon}")"
+  rsvg-convert -w "${size}" -h "${size}" branding/logo.svg -o "${icon}"
+done
+
+wallpaper="${profile}/airootfs/usr/share/wallpapers/Najs/contents/images/2560x1600.png"
+install -d "$(dirname "${wallpaper}")"
+rsvg-convert -w 2560 -h 1600 branding/wallpaper.svg -o "${wallpaper}"
+install -Dm644 branding/wallpaper.svg "${profile}/airootfs/usr/share/wallpapers/Najs/contents/images/2560x1600.svg"
+install -Dm644 branding/wallpaper-metadata.json "${profile}/airootfs/usr/share/wallpapers/Najs/metadata.json"
+
+install -Dm644 branding/fastfetch-logo.txt "${profile}/airootfs/usr/share/najs/fastfetch/logo.txt"
+install -Dm644 branding/fastfetch-config.jsonc "${profile}/airootfs/etc/xdg/fastfetch/config.jsonc"
+install -Dm644 branding/najs-fastfetch.sh "${profile}/airootfs/etc/profile.d/najs-fastfetch.sh"
+install -Dm644 branding/najs-prompt.sh "${profile}/airootfs/etc/profile.d/najs-prompt.sh"
+install -Dm644 branding/bashrc "${profile}/airootfs/etc/skel/.bashrc"
+install -Dm644 branding/Najs.colorscheme "${profile}/airootfs/usr/share/konsole/Najs.colorscheme"
+install -Dm644 branding/Najs.profile "${profile}/airootfs/usr/share/konsole/Najs.profile"
+install -Dm644 branding/kdeglobals "${profile}/airootfs/etc/xdg/kdeglobals"
+install -Dm644 branding/konsolerc "${profile}/airootfs/etc/xdg/konsolerc"
+install -Dm644 branding/najs-first-login.desktop "${profile}/airootfs/etc/xdg/autostart/najs-first-login.desktop"
+install -Dm755 branding/apply-desktop-branding "${profile}/airootfs/usr/local/lib/najs/apply-desktop-branding"
+install -d "${profile}/airootfs/usr/share/plasma/look-and-feel"
+cp -a branding/look-and-feel "${profile}/airootfs/usr/share/plasma/look-and-feel/org.najs.desktop"
+install -Dm644 branding/sddm-theme.conf.user "${profile}/airootfs/usr/share/sddm/themes/breeze/theme.conf.user"
+install -Dm644 branding/najs-about.desktop "${profile}/airootfs/usr/share/applications/najs-about.desktop"
+install -Dm644 branding/najs-welcome-gui.desktop "${profile}/airootfs/usr/local/share/applications/org.kde.plasma-welcome.desktop"
+install -Dm644 branding/qml6.desktop "${profile}/airootfs/usr/local/share/applications/qml6.desktop"
+install -Dm644 branding/qml6.desktop "${profile}/airootfs/usr/local/share/applications/qml.desktop"
+install -Dm755 branding/najs-welcome "${profile}/airootfs/usr/bin/najs-welcome"
+install -Dm755 branding/najs-welcome-gui "${profile}/airootfs/usr/local/bin/najs-welcome-gui"
+install -Dm644 branding/welcome.qml "${profile}/airootfs/usr/share/najs/welcome/main.qml"
+install -Dm644 branding/plasma-layout.js "${profile}/airootfs/usr/share/najs/plasma/layout.js"
+
+install -d \
+  "${profile}/airootfs/etc/systemd/system/graphical.target.wants" \
+  "${profile}/airootfs/etc/systemd/system/multi-user.target.wants" \
+  "${profile}/airootfs/etc/systemd/system/timers.target.wants"
+ln -s ../najs-live-health.service \
+  "${profile}/airootfs/etc/systemd/system/graphical.target.wants/najs-live-health.service"
+ln -s ../najs-vm-install.service \
+  "${profile}/airootfs/etc/systemd/system/multi-user.target.wants/najs-vm-install.service"
+ln -s ../najs-flatpak-setup.timer \
+  "${profile}/airootfs/etc/systemd/system/timers.target.wants/najs-flatpak-setup.timer"
+
+mkarchiso -v -w "${work}/work" -o "${root}/out" "${profile}"

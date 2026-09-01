@@ -1,0 +1,15 @@
+{
+  "KPlugin": {
+    "Id": "org.najs.desktop",
+    "Name": "Najs Fold",
+    "Description": "The default Najs desktop identity",
+    "Version": "0.1.0",
+    "License": "GPL-3.0-or-later",
+    "Authors": [
+      {
+        "Name": "Najs Project"
+      }
+    ]
+  },
+  "X-Plasma-APIVersion": "2"
+}

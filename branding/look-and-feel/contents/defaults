@@ -1,0 +1,12 @@
+[kdeglobals][General]
+AccentColor=89,210,255
+ColorScheme=BreezeDark
+
+[kdeglobals][Icons]
+Theme=breeze-dark
+
+[plasmarc][Theme]
+name=breeze-dark
+
+[Wallpaper]
+Image=/usr/share/wallpapers/Najs/contents/images/2560x1600.png

@@ -1,0 +1,10 @@
+[Unit]
+Description=Report Najs live boot health to the VM serial port
+After=sddm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/najs/report-live-health
+
+[Install]
+WantedBy=graphical.target

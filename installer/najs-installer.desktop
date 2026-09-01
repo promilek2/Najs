@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Install Najs
+Comment=Install Najs on this computer
+Exec=konsole -e sudo /usr/local/bin/najs-install
+Icon=najs
+Terminal=false
+Categories=System;

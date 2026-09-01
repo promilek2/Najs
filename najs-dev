@@ -1,0 +1,354 @@
+#!/usr/bin/env python3
+"""Developer entry point for Najs builds and tests."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parent
+OUT = ROOT / "out"
+BUILDER_IMAGE = "najs-archiso-builder:dev"
+
+
+def run(command: list[str], *, env: dict[str, str] | None = None) -> None:
+    print("+", " ".join(command), flush=True)
+    subprocess.run(command, cwd=ROOT, env=env, check=True)
+
+
+def find_container_engine() -> str | None:
+    requested = os.environ.get("NAJS_CONTAINER_ENGINE")
+    if requested:
+        return requested
+    for candidate in ("podman", "docker"):
+        if shutil.which(candidate):
+            return candidate
+    return None
+
+
+def container_command(engine: str, arguments: list[str]) -> list[str]:
+    if Path(engine).name != "podman" or arguments[0] not in {"build", "pull"}:
+        return [engine, *arguments]
+
+    policy = ROOT / ".build" / "containers-policy.json"
+    policy.parent.mkdir(exist_ok=True)
+    policy.write_text(
+        json.dumps(
+            {
+                "default": [{"type": "reject"}],
+                "transports": {
+                    "containers-storage": {
+                        "": [{"type": "insecureAcceptAnything"}]
+                    },
+                    "docker": {
+                        "docker.io/library/archlinux": [
+                            {"type": "insecureAcceptAnything"}
+                        ]
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return [engine, arguments[0], "--signature-policy", str(policy), *arguments[1:]]
+
+
+def bootstrap() -> None:
+    required = {
+        "git": shutil.which("git"),
+        "python3": shutil.which("python3"),
+        "cargo": shutil.which("cargo"),
+        "container engine": find_container_engine(),
+        "qemu-system-x86_64": shutil.which("qemu-system-x86_64"),
+    }
+    for name, path in required.items():
+        print(f"{name:24} {path or 'missing'}")
+    if not required["git"] or not required["python3"]:
+        raise SystemExit("missing base development requirements")
+
+
+def build_cli() -> None:
+    if not shutil.which("cargo"):
+        raise SystemExit("cargo is missing; use a Rust development shell")
+    run(["cargo", "build", "--locked", "--release", "--package", "najs-cli"])
+
+
+def test_unit() -> None:
+    if not shutil.which("cargo"):
+        raise SystemExit("cargo is missing; use a Rust development shell")
+    run(["cargo", "fmt", "--all", "--", "--check"])
+    run(["cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings"])
+    run(["cargo", "test", "--workspace"])
+
+
+def build_iso() -> None:
+    engine = find_container_engine()
+    if not engine:
+        raise SystemExit("Podman or Docker is required for the isolated ISO build")
+    if Path(engine).name == "podman" and os.geteuid() != 0:
+        raise SystemExit(
+            "mkarchiso requires rootful Podman for mount operations; rerun this command with sudo"
+        )
+    OUT.mkdir(exist_ok=True)
+    package_cache = ROOT / ".build/pacman-cache"
+    package_cache.mkdir(parents=True, exist_ok=True)
+    run(
+        container_command(
+            engine,
+            [
+                "build",
+                "--file",
+                str(ROOT / "containers/archiso/Containerfile"),
+                "--tag",
+                BUILDER_IMAGE,
+                str(ROOT),
+            ],
+        )
+    )
+    volume = f"{ROOT}:/src"
+    if Path("/sys/fs/selinux").exists():
+        volume += ":Z"
+    run(
+        container_command(
+            engine,
+            [
+                "run",
+                "--rm",
+                "--privileged",
+                "--pids-limit",
+                "-1",
+                "--volume",
+                volume,
+                "--volume",
+                f"{package_cache}:/var/cache/pacman/pkg",
+                "--env",
+                f"SOURCE_DATE_EPOCH={source_date_epoch()}",
+                BUILDER_IMAGE,
+            ],
+        )
+    )
+
+
+def source_date_epoch() -> str:
+    result = subprocess.run(
+        ["git", "log", "-1", "--format=%ct"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+    return str(int(time.time()))
+
+
+def find_ovmf() -> Path:
+    requested = os.environ.get("NAJS_OVMF_CODE")
+    if requested:
+        candidate = Path(requested)
+        if candidate.exists():
+            return candidate
+        raise SystemExit(f"NAJS_OVMF_CODE does not exist: {candidate}")
+
+    candidates = (
+        *Path("/nix/store").glob("*-OVMF-*-fd/FV/OVMF.fd"),
+        Path("/usr/share/edk2/x64/OVMF_CODE.4m.fd"),
+        Path("/usr/share/edk2-ovmf/x64/OVMF_CODE.fd"),
+        Path("/run/current-system/sw/share/qemu/edk2-x86_64-code.fd"),
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    raise SystemExit("OVMF firmware was not found; set up an edk2/OVMF package")
+
+
+def run_vm() -> None:
+    qemu = shutil.which("qemu-system-x86_64")
+    if not qemu:
+        raise SystemExit("qemu-system-x86_64 is missing")
+    images = sorted(OUT.glob("najs-*.iso"), key=lambda path: path.stat().st_mtime)
+    if not images:
+        raise SystemExit("no Najs ISO in out/; run `./najs-dev build iso` first")
+    run(
+        [
+            qemu,
+            "-enable-kvm",
+            "-machine",
+            "q35",
+            "-cpu",
+            "host",
+            "-m",
+            "4096",
+            "-smp",
+            "4",
+            "-bios",
+            str(find_ovmf()),
+            "-device",
+            "virtio-vga-gl",
+            "-display",
+            "gtk,gl=on",
+            "-nic",
+            "user,model=virtio-net-pci",
+            "-cdrom",
+            str(images[-1]),
+            "-boot",
+            "d",
+        ]
+    )
+
+
+def run_install_vm() -> None:
+    qemu = shutil.which("qemu-system-x86_64")
+    qemu_img = shutil.which("qemu-img")
+    if not qemu or not qemu_img:
+        raise SystemExit("qemu-system-x86_64 and qemu-img are required")
+    images = sorted(OUT.glob("najs-*.iso"), key=lambda path: path.stat().st_mtime)
+    if not images:
+        raise SystemExit("no Najs ISO in out/; run `./najs-dev build iso` first")
+
+    vm_dir = ROOT / ".build/vm-install"
+    vm_dir.mkdir(parents=True, exist_ok=True)
+    disk = vm_dir / "najs-install.qcow2"
+    if not disk.exists():
+        run([qemu_img, "create", "-f", "qcow2", str(disk), "40G"])
+
+    print(f"installation target: {disk}")
+    print("Only this QCOW2 image is attached as a writable disk.")
+    run(
+        [
+            qemu,
+            "-enable-kvm",
+            "-machine",
+            "q35",
+            "-cpu",
+            "host",
+            "-m",
+            "6144",
+            "-smp",
+            "4",
+            "-bios",
+            str(find_ovmf()),
+            "-device",
+            "virtio-vga-gl",
+            "-display",
+            "gtk,gl=on",
+            "-nic",
+            "user,model=virtio-net-pci",
+            "-drive",
+            f"file={disk},if=virtio,format=qcow2,discard=unmap",
+            "-cdrom",
+            str(images[-1]),
+            "-boot",
+            "d",
+        ]
+    )
+
+
+def test_vm() -> None:
+    qemu = shutil.which("qemu-system-x86_64")
+    if not qemu:
+        raise SystemExit("qemu-system-x86_64 is missing")
+    images = sorted(OUT.glob("najs-*.iso"), key=lambda path: path.stat().st_mtime)
+    if not images:
+        raise SystemExit("no Najs ISO in out/; run `./najs-dev build iso` first")
+    run(
+        [
+            sys.executable,
+            str(ROOT / "tests/vm/smoke.py"),
+            "--qemu",
+            qemu,
+            "--ovmf",
+            str(find_ovmf()),
+            "--iso",
+            str(images[-1]),
+            "--output",
+            str(ROOT / ".build/vm"),
+            "--wait",
+            os.environ.get("NAJS_VM_WAIT", "120"),
+            "--login-after",
+            os.environ.get("NAJS_VM_LOGIN_AFTER", "0"),
+        ]
+    )
+
+
+def test_install_vm() -> None:
+    required = {
+        "qemu-system-x86_64": shutil.which("qemu-system-x86_64"),
+        "qemu-img": shutil.which("qemu-img"),
+        "openssl": shutil.which("openssl"),
+    }
+    missing = [name for name, path in required.items() if not path]
+    if missing:
+        raise SystemExit(f"missing installation test tools: {', '.join(missing)}")
+    images = sorted(OUT.glob("najs-*.iso"), key=lambda path: path.stat().st_mtime)
+    if not images:
+        raise SystemExit("no Najs ISO in out/; run `./najs-dev build iso` first")
+    run(
+        [
+            sys.executable,
+            str(ROOT / "tests/vm/install.py"),
+            "--qemu",
+            required["qemu-system-x86_64"],
+            "--qemu-img",
+            required["qemu-img"],
+            "--openssl",
+            required["openssl"],
+            "--ovmf",
+            str(find_ovmf()),
+            "--iso",
+            str(images[-1]),
+            "--output",
+            str(ROOT / ".build/vm-install-auto"),
+        ]
+    )
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Build and test Najs")
+    subcommands = parser.add_subparsers(dest="command", required=True)
+    subcommands.add_parser("bootstrap")
+    build = subcommands.add_parser("build")
+    build.add_argument("target", choices=("cli", "iso"))
+    test_parser = subcommands.add_parser("test")
+    test_parser.add_argument(
+        "target", nargs="?", choices=("unit", "vm", "install-vm"), default="unit"
+    )
+    run_parser = subcommands.add_parser("run")
+    run_parser.add_argument("target", choices=("vm", "install-vm"))
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    if args.command == "bootstrap":
+        bootstrap()
+    elif args.command == "build" and args.target == "cli":
+        build_cli()
+    elif args.command == "build" and args.target == "iso":
+        build_iso()
+    elif args.command == "test" and args.target == "unit":
+        test_unit()
+    elif args.command == "test" and args.target == "vm":
+        test_vm()
+    elif args.command == "test" and args.target == "install-vm":
+        test_install_vm()
+    elif args.command == "run" and args.target == "vm":
+        run_vm()
+    elif args.command == "run" and args.target == "install-vm":
+        run_install_vm()
+    else:
+        raise AssertionError("unhandled command")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except subprocess.CalledProcessError as error:
+        raise SystemExit(error.returncode) from error

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+clear
+fastfetch --config /etc/xdg/fastfetch/config.jsonc
+printf '\nNajs is a declarative desktop built around explicit system generations.\n\n'
+printf 'Useful commands:\n'
+printf '  najs status     inspect platform integration\n'
+printf '  najs doctor     diagnose the running system\n'
+printf '  najs info       show release and generation details\n'
+printf '  najs validate   validate a Najs manifest\n\n'
+najs status

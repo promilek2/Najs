@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly marker="${XDG_CONFIG_HOME:-${HOME}/.config}/najs/branding-v1"
+readonly wallpaper=/usr/share/wallpapers/Najs/contents/images/2560x1600.png
+
+if [[ -e "${marker}" ]]; then
+  exit 0
+fi
+
+plasma-apply-lookandfeel --apply org.najs.desktop || true
+for _ in {1..30}; do
+  if plasma-apply-wallpaperimage "${wallpaper}"; then
+    if command -v qdbus6 >/dev/null 2>&1; then
+      qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
+        "$(</usr/share/najs/plasma/layout.js)" >/dev/null 2>&1 || true
+    fi
+    install -d "$(dirname "${marker}")"
+    touch "${marker}"
+    pkill -x plasma-welcome >/dev/null 2>&1 || true
+    /usr/local/bin/najs-welcome-gui >/dev/null 2>&1 &
+    exit 0
+  fi
+  sleep 1
+done
+
+exit 0

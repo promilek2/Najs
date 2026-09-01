@@ -1,0 +1,14 @@
+enable NetworkManager.service
+enable avahi-daemon.service
+enable bluetooth.service
+enable cups.service
+enable firewalld.service
+enable fstrim.timer
+enable power-profiles-daemon.service
+enable sddm.service
+enable vboxservice.service
+enable najs-flatpak-setup.timer
+enable najs-live-user.service
+enable najs-live-health.service
+enable najs-vm-install.service
+disable sshd.service

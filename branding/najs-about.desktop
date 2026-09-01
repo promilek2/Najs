@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=About Najs
+Comment=Inspect this Najs system
+Exec=konsole --hold -e /usr/bin/najs-welcome
+Icon=najs
+Terminal=false
+Categories=System;

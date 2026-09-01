@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Apply Najs desktop defaults
+Exec=/usr/local/lib/najs/apply-desktop-branding
+OnlyShowIn=KDE;
+NoDisplay=true
+X-KDE-autostart-phase=2

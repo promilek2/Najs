@@ -1,0 +1,12 @@
+version = 1
+name = "development"
+description = "Core local development environment"
+
+[packages]
+install = ["base-devel", "git", "podman", "rustup"]
+
+[services]
+enable = []
+
+[configuration]
+managed_files = []

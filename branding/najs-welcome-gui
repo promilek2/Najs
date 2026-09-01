@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec qml6 /usr/share/najs/welcome/main.qml

@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+sleep 30
+{
+  echo "NAJS_VM_HEALTH_BEGIN"
+  systemctl --no-pager --failed || true
+  systemctl --no-pager status najs-live-user.service sddm.service || true
+  id najs || true
+  loginctl --no-pager list-sessions || true
+  health=ok
+  if systemctl is-active --quiet NetworkManager.service; then
+    echo "NetworkManager: active"
+  else
+    echo "NetworkManager: failed"
+    health=failed
+  fi
+  if nmcli --terse --fields STATE general | grep -qx connected; then
+    echo "network: connected"
+  else
+    echo "network: failed"
+    health=failed
+  fi
+  for unit in cups.service firewalld.service; do
+    if systemctl is-active --quiet "${unit}"; then
+      echo "${unit}: active"
+    else
+      echo "${unit}: failed"
+      health=failed
+    fi
+  done
+  for unit in avahi-daemon.service bluetooth.service fstrim.timer najs-flatpak-setup.timer power-profiles-daemon.service vboxservice.service; do
+    if systemctl is-enabled --quiet "${unit}"; then
+      echo "${unit}: enabled"
+    else
+      echo "${unit}: failed"
+      health=failed
+    fi
+  done
+  for package in ark dolphin firewalld flatpak fwupd haruna libreoffice-fresh okular system-config-printer; do
+    if pacman -Q "${package}" >/dev/null; then
+      echo "package-${package}: installed"
+    else
+      echo "package-${package}: failed"
+      health=failed
+    fi
+  done
+  if firewall-cmd --state | grep -qx running; then
+    echo "firewall: running"
+  else
+    echo "firewall: failed"
+    health=failed
+  fi
+  if lpstat -r | grep -qx 'scheduler is running'; then
+    echo "printing: ready"
+  else
+    echo "printing: failed"
+    health=failed
+  fi
+  if /usr/local/bin/najs validate --manifest /etc/najs/manifest.toml; then
+    echo "najs-cli: ok"
+  else
+    echo "najs-cli: failed"
+    health=failed
+  fi
+  if /usr/local/bin/najs-install --check; then
+    echo "najs-installer: ok"
+  else
+    echo "najs-installer: failed"
+    health=failed
+  fi
+  if [[ -r /usr/share/icons/hicolor/scalable/apps/najs.svg ]] \
+    && [[ -r /usr/share/wallpapers/Najs/contents/images/2560x1600.png ]]; then
+    echo "branding: ok"
+  else
+    echo "branding: failed"
+    health=failed
+  fi
+  if fastfetch --version >/dev/null; then
+    echo "fastfetch: ok"
+  else
+    echo "fastfetch: failed"
+    health=failed
+  fi
+  if [[ -r /usr/share/najs/welcome/main.qml ]] \
+    && [[ -x /usr/local/bin/najs-welcome-gui ]]; then
+    echo "najs-welcome: ok"
+  else
+    echo "najs-welcome: failed"
+    health=failed
+  fi
+  if [[ -r /home/najs/.config/najs/branding-v1 ]]; then
+    echo "desktop-branding: ok"
+  else
+    echo "desktop-branding: failed"
+    health=failed
+  fi
+  if /usr/local/bin/najs doctor; then
+    echo "najs-doctor: ok"
+  else
+    echo "najs-doctor: failed"
+    health=failed
+  fi
+  if loginctl --no-legend list-sessions | grep -Eq "[[:space:]]1000[[:space:]]+najs[[:space:]]+seat0"; then
+    echo "plasma-session: active"
+  else
+    echo "plasma-session: failed"
+    health=failed
+  fi
+  if runuser --user najs -- env \
+    XDG_RUNTIME_DIR=/run/user/1000 \
+    DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
+    systemctl --user is-active --quiet pipewire.socket pipewire-pulse.socket wireplumber.service; then
+    echo "audio-session: active"
+  else
+    echo "audio-session: failed"
+    health=failed
+  fi
+  journalctl --boot --unit sddm.service --no-pager --lines 100 || true
+  if [[ "${health}" == ok ]]; then
+    echo "NAJS_VM_HEALTH_OK"
+  else
+    echo "NAJS_VM_HEALTH_FAILED"
+  fi
+  echo "NAJS_VM_HEALTH_END"
+} >/dev/ttyS0 2>&1

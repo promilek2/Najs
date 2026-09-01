@@ -1,0 +1,24 @@
+version = 1
+
+[system]
+hostname = "najs-live"
+locale = "en_US.UTF-8"
+
+[desktop]
+environment = "plasma"
+session = "wayland"
+
+[features]
+bluetooth = true
+printing = true
+
+[profiles]
+enabled = ["desktop"]
+
+[packages]
+install = ["dolphin", "fastfetch", "firefox", "konsole", "libreoffice-fresh", "networkmanager", "plasma-meta"]
+remove = []
+
+[services]
+enable = ["NetworkManager.service", "avahi-daemon.service", "bluetooth.service", "cups.service", "firewalld.service", "fstrim.timer", "power-profiles-daemon.service", "sddm.service", "vboxservice.service"]
+disable = []

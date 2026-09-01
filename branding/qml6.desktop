@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Najs Welcome Runtime
+Exec=/usr/local/bin/najs-welcome-gui
+Icon=najs
+NoDisplay=true
+StartupWMClass=qml6

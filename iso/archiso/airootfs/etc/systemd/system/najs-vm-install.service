@@ -1,0 +1,15 @@
+[Unit]
+Description=Run the isolated Najs VM installation test
+ConditionVirtualization=kvm
+ConditionPathExists=/sys/firmware/qemu_fw_cfg/by_name/opt/najs/install-config/raw
+ConditionPathExists=/sys/firmware/qemu_fw_cfg/by_name/opt/najs/install-creds/raw
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/najs/run-vm-install
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=multi-user.target

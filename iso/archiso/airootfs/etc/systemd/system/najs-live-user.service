@@ -1,0 +1,8 @@
+[Unit]
+Description=Create the Najs live user
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/najs/create-live-user
+RemainAfterExit=yes

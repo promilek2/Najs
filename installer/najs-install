@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+"""Launch Archinstall and provision the Najs platform layer."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
+
+CONFIG = Path("/usr/share/najs/installer/archinstall.json")
+TARGET = Path("/mnt/archinstall")
+PLATFORM_PATHS = (
+    Path("etc/systemd/journald.conf.d/10-najs-limits.conf"),
+    Path("etc/systemd/system/najs-flatpak-setup.service"),
+    Path("etc/systemd/system/najs-flatpak-setup.timer"),
+    Path("etc/sysctl.d/90-najs-desktop.conf"),
+    Path("etc/profile.d/najs-fastfetch.sh"),
+    Path("etc/profile.d/najs-prompt.sh"),
+    Path("etc/skel/.bashrc"),
+    Path("etc/sddm.conf.d/10-najs-theme.conf"),
+    Path("etc/xdg/autostart/najs-first-login.desktop"),
+    Path("etc/xdg/fastfetch"),
+    Path("etc/xdg/kdeglobals"),
+    Path("etc/xdg/konsolerc"),
+    Path("usr/bin/najs-welcome"),
+    Path("usr/local/bin/najs-welcome-gui"),
+    Path("usr/local/lib/najs/apply-desktop-branding"),
+    Path("usr/share/applications/najs-about.desktop"),
+    Path("usr/local/share/applications/org.kde.plasma-welcome.desktop"),
+    Path("usr/local/share/applications/qml6.desktop"),
+    Path("usr/local/share/applications/qml.desktop"),
+    Path("usr/share/konsole/Najs.colorscheme"),
+    Path("usr/share/konsole/Najs.profile"),
+    Path("usr/share/najs/fastfetch"),
+    Path("usr/share/najs/welcome"),
+    Path("usr/share/najs/plasma"),
+    Path("usr/share/pixmaps/najs.svg"),
+    Path("usr/share/plasma/look-and-feel/org.najs.desktop"),
+    Path("usr/share/sddm/themes/breeze/theme.conf.user"),
+    Path("usr/share/wallpapers/Najs"),
+    Path("usr/share/icons/hicolor/scalable/apps/najs.svg"),
+    *(Path(f"usr/share/icons/hicolor/{size}x{size}/apps/najs.png") for size in (16, 32, 64, 128, 256)),
+)
+DEFAULT_SERVICES = (
+    "NetworkManager.service",
+    "avahi-daemon.service",
+    "bluetooth.service",
+    "cups.service",
+    "firewalld.service",
+    "fstrim.timer",
+    "najs-flatpak-setup.timer",
+    "power-profiles-daemon.service",
+    "sddm.service",
+    "vboxservice.service",
+)
+
+
+def verify_environment() -> None:
+    if not Path("/sys/firmware/efi").is_dir():
+        raise SystemExit("Najs pre-alpha installation currently requires UEFI boot")
+    if not shutil.which("archinstall"):
+        raise SystemExit("archinstall is not available in this live environment")
+    if not CONFIG.is_file():
+        raise SystemExit(f"installer preset is missing: {CONFIG}")
+    with CONFIG.open(encoding="utf-8") as config_file:
+        json.load(config_file)
+
+
+def initialize_keyring() -> None:
+    subprocess.run(["pacman-key", "--init"], check=True)
+    subprocess.run(["pacman-key", "--populate", "archlinux"], check=True)
+
+
+def copy_platform_files(target: Path) -> None:
+    for relative_path in PLATFORM_PATHS:
+        source = Path("/") / relative_path
+        destination = target / relative_path
+        if source.is_dir():
+            shutil.copytree(source, destination, dirs_exist_ok=True)
+        else:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+
+    source_lines = (
+        "[[ -f /etc/profile.d/najs-fastfetch.sh ]] && . /etc/profile.d/najs-fastfetch.sh",
+        "[[ -f /etc/profile.d/najs-prompt.sh ]] && . /etc/profile.d/najs-prompt.sh",
+    )
+    home_root = target / "home"
+    if home_root.is_dir():
+        for home in home_root.iterdir():
+            if not home.is_dir():
+                continue
+            bashrc = home / ".bashrc"
+            content = bashrc.read_text(encoding="utf-8") if bashrc.exists() else ""
+            missing_lines = [line for line in source_lines if line not in content]
+            if missing_lines:
+                suffix = "\n".join(missing_lines)
+                bashrc.write_text(content.rstrip() + "\n" + suffix + "\n", encoding="utf-8")
+            home_stat = home.stat()
+            os.chown(bashrc, home_stat.st_uid, home_stat.st_gid)
+
+
+def provision_target(target: Path) -> None:
+    if not (target / "etc/os-release").exists():
+        raise SystemExit(f"installed target is not mounted at {target}")
+
+    (target / "usr/bin").mkdir(parents=True, exist_ok=True)
+    (target / "usr/share/najs/profiles").mkdir(parents=True, exist_ok=True)
+    (target / "etc/najs").mkdir(parents=True, exist_ok=True)
+
+    shutil.copy2("/usr/local/bin/najs", target / "usr/bin/najs")
+    for profile in Path("/usr/share/najs/profiles").glob("*.toml"):
+        shutil.copy2(profile, target / "usr/share/najs/profiles" / profile.name)
+    copy_platform_files(target)
+    shutil.copy2("/etc/os-release", target / "usr/lib/os-release")
+    (target / "etc/issue").write_text("Najs 0.1 Development \\r (\\l)\n", encoding="utf-8")
+
+    (target / "etc/najs-release").write_text(
+        'PRETTY_NAME="Najs 0.1 Development"\nNAJS_GENERATION="initial"\n',
+        encoding="utf-8",
+    )
+    (target / "etc/najs/manifest.toml").write_text(
+        """version = 1
+
+[system]
+hostname = "najs"
+locale = "en_US.UTF-8"
+
+[desktop]
+environment = "plasma"
+session = "wayland"
+
+[features]
+bluetooth = true
+printing = true
+
+[profiles]
+enabled = ["desktop"]
+
+[packages]
+install = ["dolphin", "fastfetch", "firefox", "konsole", "libreoffice-fresh", "networkmanager", "plasma-meta"]
+remove = []
+
+[services]
+enable = ["NetworkManager.service", "avahi-daemon.service", "bluetooth.service", "cups.service", "firewalld.service", "fstrim.timer", "najs-flatpak-setup.timer", "power-profiles-daemon.service", "sddm.service", "vboxservice.service"]
+disable = []
+""",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        ["systemctl", f"--root={target}", "enable", *DEFAULT_SERVICES],
+        check=True,
+    )
+    (target / "var/lib/najs").mkdir(parents=True, exist_ok=True)
+    (target / "var/lib/najs/installation.json").write_text(
+        json.dumps({"schema": 1, "generation": "initial", "installer": "archinstall"})
+        + "\n",
+        encoding="utf-8",
+    )
+    if os.path.ismount(target / "boot"):
+        subprocess.run(["arch-chroot", str(target), "mkinitcpio", "-P"], check=True)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Install Najs from the live environment")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="validate installer prerequisites without touching disks",
+    )
+    parser.add_argument("--provision-only", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--target", type=Path, default=TARGET, help=argparse.SUPPRESS)
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    if args.provision_only:
+        if os.environ.get("NAJS_INSTALL_TEST") != "1":
+            raise SystemExit("provision-only mode is restricted to the VM test harness")
+        if os.geteuid() != 0:
+            raise SystemExit("provision-only mode requires root")
+        provision_target(args.target)
+        return
+
+    verify_environment()
+    if args.check:
+        print("Najs installer prerequisites: ok")
+        return
+    if os.geteuid() != 0:
+        raise SystemExit("run the Najs installer as root")
+
+    initialize_keyring()
+    print("Archinstall will ask for the target disk, encryption, locale, and user account.")
+    print("Review the installation summary carefully before confirming disk changes.")
+    result = subprocess.run(["archinstall", "--config", str(CONFIG)], check=False)
+    if result.returncode != 0:
+        raise SystemExit(f"archinstall exited with status {result.returncode}")
+    provision_target(TARGET)
+    print("Najs platform layer provisioned. Reboot only after Archinstall has completed.")
+
+
+if __name__ == "__main__":
+    main()

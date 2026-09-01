@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! id najs >/dev/null 2>&1; then
+  useradd --create-home --groups wheel,audio,video,storage --shell /bin/bash najs
+  passwd --delete najs
+fi
+
+install --directory --owner=najs --group=najs /home/najs/.config

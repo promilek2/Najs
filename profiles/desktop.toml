@@ -1,0 +1,57 @@
+version = 1
+name = "desktop"
+description = "Complete Najs Plasma desktop baseline"
+
+[packages]
+install = [
+  "7zip",
+  "ark",
+  "bash-completion",
+  "bluez-obex",
+  "bluez-utils",
+  "btop",
+  "cups",
+  "cups-pk-helper",
+  "dolphin",
+  "elisa",
+  "fastfetch",
+  "firewalld",
+  "firefox",
+  "flatpak",
+  "fwupd",
+  "gwenview",
+  "haruna",
+  "kate",
+  "kcalc",
+  "keepassxc",
+  "konsole",
+  "libreoffice-fresh",
+  "networkmanager",
+  "noto-fonts",
+  "okular",
+  "partitionmanager",
+  "pipewire",
+  "plasma-meta",
+  "power-profiles-daemon",
+  "system-config-printer",
+]
+
+[services]
+enable = [
+  "NetworkManager.service",
+  "avahi-daemon.service",
+  "bluetooth.service",
+  "cups.service",
+  "firewalld.service",
+  "fstrim.timer",
+  "power-profiles-daemon.service",
+  "sddm.service",
+  "vboxservice.service",
+]
+
+[configuration]
+managed_files = [
+  "/etc/najs/manifest.toml",
+  "/etc/systemd/journald.conf.d/10-najs-limits.conf",
+  "/etc/sysctl.d/90-najs-desktop.conf",
+]

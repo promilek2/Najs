@@ -1,0 +1,24 @@
+version = 1
+
+[system]
+hostname = "najs-pc"
+locale = "pl_PL.UTF-8"
+
+[desktop]
+environment = "plasma"
+session = "wayland"
+
+[features]
+bluetooth = true
+printing = false
+
+[profiles]
+enabled = ["development"]
+
+[packages]
+install = ["firefox", "git"]
+remove = []
+
+[services]
+enable = ["NetworkManager.service", "bluetooth.service"]
+disable = []

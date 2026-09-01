@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2560 1600">
+  <defs>
+    <linearGradient id="bg" x1="180" y1="80" x2="2350" y2="1530" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10263A"/>
+      <stop offset="0.48" stop-color="#091723"/>
+      <stop offset="1" stop-color="#050B12"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0" cy="0" r="1" gradientTransform="translate(2180 190) rotate(137) scale(970 760)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#59D2FF" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#59D2FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0" cy="0" r="1" gradientTransform="translate(250 1450) rotate(-32) scale(920 620)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#159BD6" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#159BD6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ribbon" x1="220" y1="1460" x2="2290" y2="150" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#59D2FF" stop-opacity="0.02"/>
+      <stop offset="0.5" stop-color="#59D2FF" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#C7F5FF" stop-opacity="0.03"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="1830" y1="610" x2="2260" y2="1060" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8BE7FF"/>
+      <stop offset="0.55" stop-color="#59D2FF"/>
+      <stop offset="1" stop-color="#159BD6"/>
+    </linearGradient>
+    <filter id="blur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="70"/>
+    </filter>
+  </defs>
+  <rect width="2560" height="1600" fill="url(#bg)"/>
+  <rect width="2560" height="1600" fill="url(#glowA)"/>
+  <rect width="2560" height="1600" fill="url(#glowB)"/>
+  <path d="M-130 1430 1090 210h310L180 1600h-310v-170Z" fill="url(#ribbon)"/>
+  <path d="m620 1600 1240-1240h195L815 1600H620Z" fill="#59D2FF" fill-opacity="0.035"/>
+  <path d="m1540 0 1120 1120v300L1240 0h300Z" fill="#A8EEFF" fill-opacity="0.025"/>
+  <path d="M1860 1065V720c0-48 39-87 87-87h40l221 287V633h101v414c0 48-39 87-87 87h-40l-221-287v218h-101Z" fill="#59D2FF" fill-opacity="0.22" filter="url(#blur)"/>
+  <path d="M1860 1042V697c0-48 39-87 87-87h40l221 287V610h101v414c0 48-39 87-87 87h-40l-221-287v218h-101Z" fill="url(#mark)" fill-opacity="0.82"/>
+  <path d="M2208 610h101l-101 135V610Z" fill="#D5F8FF" fill-opacity="0.75"/>
+  <circle cx="1790" cy="1110" r="5" fill="#59D2FF"/>
+  <circle cx="1758" cy="1110" r="5" fill="#59D2FF" fill-opacity="0.5"/>
+  <circle cx="1726" cy="1110" r="5" fill="#59D2FF" fill-opacity="0.2"/>
+</svg>

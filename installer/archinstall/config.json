@@ -1,0 +1,124 @@
+{
+  "archinstall-language": "English",
+  "audio_config": {
+    "audio": "pipewire"
+  },
+  "bootloader_config": {
+    "bootloader": "Systemd-boot",
+    "uki": true,
+    "removable": false
+  },
+  "debug": false,
+  "hostname": "najs",
+  "kernels": [
+    "linux"
+  ],
+  "locale_config": {
+    "kb_layout": "us",
+    "sys_enc": "UTF-8",
+    "sys_lang": "en_US"
+  },
+  "network_config": {
+    "type": "nm"
+  },
+  "no_pkg_lookups": true,
+  "ntp": true,
+  "offline": false,
+  "packages": [
+    "7zip",
+    "alsa-firmware",
+    "ark",
+    "avahi",
+    "bash-completion",
+    "bluez-obex",
+    "bluez-utils",
+    "btop",
+    "btrfs-progs",
+    "cups",
+    "cups-pdf",
+    "cups-pk-helper",
+    "dolphin",
+    "elisa",
+    "fastfetch",
+    "fd",
+    "firewalld",
+    "firefox",
+    "flatpak",
+    "fwupd",
+    "git",
+    "gst-plugin-pipewire",
+    "gst-plugins-bad",
+    "gst-plugins-good",
+    "gst-plugins-ugly",
+    "gwenview",
+    "haruna",
+    "hunspell-en_us",
+    "hunspell-pl",
+    "jq",
+    "kamoso",
+    "kate",
+    "kcalc",
+    "keepassxc",
+    "konsole",
+    "libreoffice-fresh",
+    "man-pages",
+    "networkmanager",
+    "networkmanager-openvpn",
+    "noto-fonts",
+    "noto-fonts-cjk",
+    "noto-fonts-emoji",
+    "okular",
+    "partitionmanager",
+    "pipewire",
+    "pipewire-alsa",
+    "pipewire-pulse",
+    "plasma-meta",
+    "power-profiles-daemon",
+    "qemu-guest-agent",
+    "ripgrep",
+    "sof-firmware",
+    "spice-vdagent",
+    "sudo",
+    "system-config-printer",
+    "ttf-liberation",
+    "unrar",
+    "unzip",
+    "virtualbox-guest-utils",
+    "wget",
+    "wireplumber",
+    "xdg-desktop-portal-kde",
+    "zip"
+  ],
+  "pacman_config": {
+    "color": true,
+    "parallel_downloads": 5
+  },
+  "profile_config": {
+    "gfx_driver": "All open-source",
+    "greeter": "sddm",
+    "profile": {
+      "details": [
+        "KDE Plasma"
+      ],
+      "main": "Desktop"
+    }
+  },
+  "script": "guided",
+  "services": [
+    "NetworkManager",
+    "avahi-daemon",
+    "bluetooth",
+    "cups",
+    "firewalld",
+    "fstrim.timer",
+    "power-profiles-daemon",
+    "sddm",
+    "vboxservice"
+  ],
+  "silent": false,
+  "swap": {
+    "enabled": true,
+    "algorithm": "zstd"
+  },
+  "timezone": "UTC"
+}

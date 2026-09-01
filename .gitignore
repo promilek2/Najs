@@ -1,0 +1,6 @@
+/target/
+/.build/
+/out/
+__pycache__/
+*.iso
+*.qcow2

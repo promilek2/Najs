@@ -1,0 +1,7 @@
+FROM docker.io/library/archlinux:base-devel
+
+RUN pacman -Syu --noconfirm --needed archiso librsvg rust cargo \
+    && pacman -Scc --noconfirm
+
+WORKDIR /src
+ENTRYPOINT ["/src/tools/build-iso-in-container"]

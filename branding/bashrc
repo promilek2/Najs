@@ -1,0 +1,3 @@
+[[ -f /etc/bash.bashrc ]] && . /etc/bash.bashrc
+[[ -f /etc/profile.d/najs-fastfetch.sh ]] && . /etc/profile.d/najs-fastfetch.sh
+[[ -f /etc/profile.d/najs-prompt.sh ]] && . /etc/profile.d/najs-prompt.sh
