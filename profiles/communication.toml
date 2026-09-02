@@ -1,0 +1,12 @@
+version = 1
+name = "communication"
+description = "Chat, email, and messaging applications"
+
+[packages]
+install = ["discord", "signal-desktop", "telegram-desktop", "thunderbird"]
+
+[services]
+enable = []
+
+[configuration]
+managed_files = []

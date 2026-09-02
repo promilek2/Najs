@@ -1,0 +1,349 @@
+{
+  "version": 1,
+  "base_packages": [
+    "7zip",
+    "alsa-firmware",
+    "ark",
+    "avahi",
+    "bash-completion",
+    "bluez-obex",
+    "bluez-utils",
+    "btop",
+    "btrfs-progs",
+    "cups",
+    "cups-pdf",
+    "cups-pk-helper",
+    "fastfetch",
+    "fd",
+    "firewalld",
+    "firefox",
+    "flatpak",
+    "fwupd",
+    "git",
+    "gst-plugin-pipewire",
+    "gst-plugins-bad",
+    "gst-plugins-good",
+    "gst-plugins-ugly",
+    "jq",
+    "keepassxc",
+    "man-pages",
+    "networkmanager",
+    "networkmanager-openvpn",
+    "noto-fonts",
+    "noto-fonts-cjk",
+    "noto-fonts-emoji",
+    "pipewire",
+    "pipewire-alsa",
+    "pipewire-pulse",
+    "power-profiles-daemon",
+    "qemu-guest-agent",
+    "ripgrep",
+    "sof-firmware",
+    "spice-vdagent",
+    "sudo",
+    "system-config-printer",
+    "ttf-liberation",
+    "unrar",
+    "unzip",
+    "virtualbox-guest-utils",
+    "wget",
+    "wireplumber",
+    "zenity",
+    "zip"
+  ],
+  "base_services": [
+    "NetworkManager",
+    "avahi-daemon",
+    "bluetooth",
+    "cups",
+    "firewalld",
+    "fstrim.timer",
+    "power-profiles-daemon",
+    "vboxservice"
+  ],
+  "desktops": {
+    "kde": {
+      "label": "KDE Plasma",
+      "description": "Kompletny i latwy pulpit. Polecany dla wiekszosci osob.",
+      "profile": "KDE Plasma",
+      "greeter": "sddm",
+      "service": "sddm",
+      "environment": "plasma",
+      "session": "wayland",
+      "packages": [
+        "dolphin",
+        "kate",
+        "kcalc",
+        "konsole",
+        "partitionmanager",
+        "xdg-desktop-portal-kde"
+      ]
+    },
+    "gnome": {
+      "label": "GNOME",
+      "description": "Prosty pulpit z duzymi, czytelnymi elementami.",
+      "profile": "GNOME",
+      "greeter": "gdm",
+      "service": "gdm",
+      "environment": "gnome",
+      "session": "wayland",
+      "packages": [
+        "gnome-disk-utility",
+        "xdg-desktop-portal-gnome"
+      ]
+    },
+    "hyprland": {
+      "label": "Hyprland",
+      "description": "Lekki kafelkowy pulpit Wayland dla osob lubiacych skroty klawiaturowe.",
+      "profile": "Hyprland",
+      "greeter": "sddm",
+      "service": "sddm",
+      "environment": "hyprland",
+      "session": "wayland",
+      "packages": [
+        "network-manager-applet",
+        "nwg-look",
+        "pavucontrol",
+        "swaybg",
+        "swaylock",
+        "waybar",
+        "wl-clipboard",
+        "xdg-desktop-portal-gtk",
+        "xdg-user-dirs"
+      ]
+    },
+    "xfce": {
+      "label": "Xfce",
+      "description": "Lekki klasyczny pulpit dla slabszych komputerow.",
+      "profile": "Xfce4",
+      "greeter": "lightdm-gtk-greeter",
+      "service": "lightdm",
+      "environment": "xfce",
+      "session": "xorg",
+      "packages": [
+        "network-manager-applet",
+        "xdg-desktop-portal-gtk"
+      ]
+    },
+    "cinnamon": {
+      "label": "Cinnamon",
+      "description": "Tradycyjny uklad pulpitu podobny do klasycznych systemow PC.",
+      "profile": "Cinnamon",
+      "greeter": "lightdm-gtk-greeter",
+      "service": "lightdm",
+      "environment": "cinnamon",
+      "session": "xorg",
+      "packages": [
+        "network-manager-applet",
+        "xdg-desktop-portal-gtk"
+      ]
+    }
+  },
+  "gpus": {
+    "auto": {
+      "label": "Automatycznie / otwarte sterowniki",
+      "description": "Najbezpieczniejszy wybor dla nieznanego sprzetu.",
+      "driver": "All open-source",
+      "gaming_packages": [
+        "lib32-mesa",
+        "lib32-vulkan-intel",
+        "lib32-vulkan-nouveau",
+        "lib32-vulkan-radeon"
+      ]
+    },
+    "amd": {
+      "label": "AMD / ATI",
+      "description": "Otwarte sterowniki Mesa i RADV.",
+      "driver": "AMD / ATI (open-source)",
+      "gaming_packages": [
+        "lib32-mesa",
+        "lib32-vulkan-radeon"
+      ]
+    },
+    "intel": {
+      "label": "Intel",
+      "description": "Otwarte sterowniki Intel Mesa.",
+      "driver": "Intel (open-source)",
+      "gaming_packages": [
+        "lib32-mesa",
+        "lib32-vulkan-intel"
+      ]
+    },
+    "nvidia": {
+      "label": "NVIDIA Turing lub nowsza",
+      "description": "Otwarty modul jadra NVIDIA z oficjalnymi bibliotekami uzytkownika.",
+      "driver": "Nvidia (open kernel module for newer GPUs, Turing+)",
+      "gaming_packages": [
+        "lib32-nvidia-utils"
+      ]
+    },
+    "vm": {
+      "label": "Maszyna wirtualna",
+      "description": "Sterownik odpowiedni do testow w VirtualBox lub QEMU.",
+      "driver": "VirtualBox (open-source)",
+      "gaming_packages": [
+        "lib32-mesa"
+      ]
+    }
+  },
+  "bundles": {
+    "office": {
+      "label": "Biuro i dokumenty",
+      "description": "LibreOffice, PDF oraz slowniki polski i angielski.",
+      "packages": [
+        "hunspell-en_us",
+        "hunspell-pl",
+        "libreoffice-fresh",
+        "okular"
+      ],
+      "services": []
+    },
+    "media": {
+      "label": "Multimedia",
+      "description": "Odtwarzanie muzyki, filmow i prosta obsluga obrazow.",
+      "packages": [
+        "gwenview",
+        "vlc"
+      ],
+      "services": []
+    },
+    "gaming": {
+      "label": "Granie",
+      "description": "Steam, Lutris, Wine, GameMode, Gamescope, MangoHud, Discord i OBS.",
+      "packages": [
+        "discord",
+        "gamemode",
+        "gamescope",
+        "lib32-vulkan-icd-loader",
+        "lutris",
+        "mangohud",
+        "obs-studio",
+        "protontricks",
+        "steam",
+        "vulkan-icd-loader",
+        "vulkan-tools",
+        "wine",
+        "wine-gecko",
+        "wine-mono",
+        "winetricks",
+        "yad"
+      ],
+      "services": [],
+      "repositories": [
+        "multilib"
+      ]
+    },
+    "creator": {
+      "label": "Tworzenie",
+      "description": "Blender, Krita, GIMP, Inkscape, Kdenlive, Audacity i OBS.",
+      "packages": [
+        "audacity",
+        "blender",
+        "gimp",
+        "inkscape",
+        "kdenlive",
+        "krita",
+        "obs-studio"
+      ],
+      "services": []
+    },
+    "development": {
+      "label": "Programowanie",
+      "description": "Code, GitHub CLI, Rust, Python, Node.js, Podman i Distrobox.",
+      "packages": [
+        "base-devel",
+        "code",
+        "distrobox",
+        "github-cli",
+        "nodejs",
+        "npm",
+        "podman",
+        "python-pip",
+        "rustup"
+      ],
+      "services": []
+    },
+    "communication": {
+      "label": "Komunikacja",
+      "description": "Discord, Signal, Telegram i Thunderbird.",
+      "packages": [
+        "discord",
+        "signal-desktop",
+        "telegram-desktop",
+        "thunderbird"
+      ],
+      "services": []
+    },
+    "virtualization": {
+      "label": "Maszyny wirtualne",
+      "description": "QEMU/KVM, libvirt i graficzny Virtual Machine Manager.",
+      "packages": [
+        "dnsmasq",
+        "edk2-ovmf",
+        "libvirt",
+        "qemu-full",
+        "virt-manager"
+      ],
+      "services": [
+        "libvirtd"
+      ]
+    }
+  },
+  "use_cases": {
+    "minimal": {
+      "label": "Minimalny",
+      "description": "Tylko pulpit, przegladarka i podstawy systemu.",
+      "bundles": []
+    },
+    "standard": {
+      "label": "Codzienny",
+      "description": "Biuro, dokumenty i multimedia.",
+      "bundles": [
+        "office",
+        "media"
+      ]
+    },
+    "gaming": {
+      "label": "Gracz",
+      "description": "Kompletny zestaw do gier i komunikacji.",
+      "bundles": [
+        "office",
+        "media",
+        "gaming",
+        "communication"
+      ]
+    },
+    "creator": {
+      "label": "Tworca",
+      "description": "Biuro, multimedia i aplikacje kreatywne.",
+      "bundles": [
+        "office",
+        "media",
+        "creator"
+      ]
+    },
+    "development": {
+      "label": "Programista",
+      "description": "Programowanie oraz lokalne maszyny wirtualne.",
+      "bundles": [
+        "office",
+        "media",
+        "development",
+        "virtualization"
+      ]
+    },
+    "everything": {
+      "label": "Wszystko",
+      "description": "Wszystkie dostepne grupy aplikacji.",
+      "bundles": [
+        "office",
+        "media",
+        "gaming",
+        "creator",
+        "development",
+        "communication",
+        "virtualization"
+      ]
+    }
+  }
+}

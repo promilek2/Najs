@@ -30,3 +30,8 @@ The default path is `/etc/najs/manifest.toml`. `najs validate` parses and checks
 the file. `najs diff` compares its managed subset with the running system and is
 read-only. `najs apply` is intentionally unavailable until isolated generation
 composition exists.
+
+Supported desktop environments are `plasma`, `gnome`, `hyprland`, `xfce`, and
+`cinnamon`. Supported session types are `wayland` and `xorg`. The installer
+records all selected application-group profiles and resolved packages in this
+manifest.

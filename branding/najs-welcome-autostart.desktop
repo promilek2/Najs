@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Najs Welcome
+Comment=Show useful first steps after login
+Exec=/usr/local/bin/najs-welcome-gui --autostart
+Icon=najs
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-KDE-autostart-after=panel

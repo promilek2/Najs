@@ -1,0 +1,12 @@
+version = 1
+name = "creator"
+description = "Graphics, 3D, audio, streaming, and video production"
+
+[packages]
+install = ["audacity", "blender", "gimp", "inkscape", "kdenlive", "krita", "obs-studio"]
+
+[services]
+enable = []
+
+[configuration]
+managed_files = []

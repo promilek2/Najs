@@ -1,9 +1,9 @@
 version = 1
 name = "development"
-description = "Core local development environment"
+description = "Local software development environment"
 
 [packages]
-install = ["base-devel", "git", "podman", "rustup"]
+install = ["base-devel", "code", "distrobox", "github-cli", "nodejs", "npm", "podman", "python-pip", "rustup"]
 
 [services]
 enable = []

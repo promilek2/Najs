@@ -86,7 +86,10 @@ mountpoint --quiet "${target}/home" || mount -o subvol=home,compress=zstd,noatim
 mountpoint --quiet "${target}/var/log" || mount -o subvol=var-log,compress=zstd,noatime "${system}" "${target}/var/log"
 mountpoint --quiet "${target}/var/cache" || mount -o subvol=var-cache,compress=zstd,noatime "${system}" "${target}/var/cache"
 mountpoint --quiet "${target}/var/tmp" || mount -o subvol=var-tmp,compress=zstd,noatime "${system}" "${target}/var/tmp"
-NAJS_INSTALL_TEST=1 /usr/local/bin/najs-install --provision-only --target "${target}"
+NAJS_INSTALL_TEST=1 /usr/local/bin/najs-install \
+  --provision-only \
+  --target "${target}" \
+  --config /run/najs-install/config.json
 
 install -d "${target}/etc/sddm.conf.d" "${target}/usr/local/lib/najs"
 cat >"${target}/etc/sddm.conf.d/99-najs-vm-test.conf" <<'EOF'
@@ -137,7 +140,7 @@ for unit in avahi-daemon.service bluetooth.service fstrim.timer najs-flatpak-set
     health=failed
   fi
 done
-for package in ark dolphin firewalld flatpak fwupd haruna libreoffice-fresh okular system-config-printer; do
+for package in ark dolphin firewalld flatpak fwupd libreoffice-fresh okular system-config-printer vlc zenity; do
   if pacman -Q "${package}" >/dev/null; then
     echo "package-${package}: installed"
   else
@@ -177,7 +180,8 @@ else
   echo "fastfetch: failed"
   health=failed
 fi
-if [[ -r /usr/share/najs/welcome/main.qml ]] \
+if [[ -r /usr/share/doc/najs/getting-started.html ]] \
+  && [[ -r /etc/xdg/autostart/najs-welcome.desktop ]] \
   && [[ -x /usr/local/bin/najs-welcome-gui ]]; then
   echo "najs-welcome: ok"
 else

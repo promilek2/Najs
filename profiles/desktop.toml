@@ -1,6 +1,6 @@
 version = 1
 name = "desktop"
-description = "Complete Najs Plasma desktop baseline"
+description = "Cross-desktop Najs hardware and service baseline"
 
 [packages]
 install = [
@@ -12,28 +12,18 @@ install = [
   "btop",
   "cups",
   "cups-pk-helper",
-  "dolphin",
-  "elisa",
   "fastfetch",
   "firewalld",
   "firefox",
   "flatpak",
   "fwupd",
-  "gwenview",
-  "haruna",
-  "kate",
-  "kcalc",
   "keepassxc",
-  "konsole",
-  "libreoffice-fresh",
   "networkmanager",
   "noto-fonts",
-  "okular",
-  "partitionmanager",
   "pipewire",
-  "plasma-meta",
   "power-profiles-daemon",
   "system-config-printer",
+  "zenity",
 ]
 
 [services]
@@ -45,7 +35,6 @@ enable = [
   "firewalld.service",
   "fstrim.timer",
   "power-profiles-daemon.service",
-  "sddm.service",
   "vboxservice.service",
 ]
 

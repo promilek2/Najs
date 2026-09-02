@@ -174,7 +174,7 @@ fn doctor() -> Result<()> {
     doctor_check(
         &mut failures,
         "display manager",
-        command_success("systemctl", &["is-active", "sddm.service"]),
+        command_success("systemctl", &["is-active", "display-manager.service"]),
     );
     doctor_check(
         &mut failures,
@@ -317,12 +317,12 @@ fn validate_manifest(manifest: &Manifest) -> Result<()> {
     )?;
     validate_names("profile", manifest.profiles.enabled.iter())?;
     if let Some(environment) = &manifest.desktop.environment
-        && environment != "plasma"
+        && !["plasma", "gnome", "hyprland", "xfce", "cinnamon"].contains(&environment.as_str())
     {
         bail!("unsupported desktop environment: {environment}");
     }
     if let Some(session) = &manifest.desktop.session
-        && session != "wayland"
+        && !["wayland", "xorg"].contains(&session.as_str())
     {
         bail!("unsupported desktop session: {session}");
     }
@@ -434,6 +434,23 @@ mod tests {
         let manifest: Manifest =
             toml::from_str("version = 1\n[packages]\ninstall = [\"firefox; reboot\"]").unwrap();
         assert!(validate_manifest(&manifest).is_err());
+    }
+
+    #[test]
+    fn accepts_supported_desktops() {
+        for (environment, session) in [
+            ("plasma", "wayland"),
+            ("gnome", "wayland"),
+            ("hyprland", "wayland"),
+            ("xfce", "xorg"),
+            ("cinnamon", "xorg"),
+        ] {
+            let source = format!(
+                "version = 1\n[desktop]\nenvironment = {environment:?}\nsession = {session:?}"
+            );
+            let manifest: Manifest = toml::from_str(&source).unwrap();
+            validate_manifest(&manifest).unwrap();
+        }
     }
 
     #[test]

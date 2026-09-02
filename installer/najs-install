@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
-"""Launch Archinstall and provision the Najs platform layer."""
+"""Configure Archinstall and provision the Najs platform layer."""
 
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 
-CONFIG = Path("/usr/share/najs/installer/archinstall.json")
+LIVE_CONFIG = Path("/usr/share/najs/installer/archinstall.json")
+LIVE_BASE_CONFIG = Path("/usr/share/najs/installer/base.json")
+LIVE_CATALOG = Path("/usr/share/najs/installer/catalog.json")
+GENERATED_CONFIG = Path("/run/najs-install/selected-config.json")
 TARGET = Path("/mnt/archinstall")
+PACKAGE_NAME = re.compile(r"^[a-zA-Z0-9@._+:-]+$")
 PLATFORM_PATHS = (
     Path("etc/systemd/journald.conf.d/10-najs-limits.conf"),
     Path("etc/systemd/system/najs-flatpak-setup.service"),
@@ -23,6 +30,7 @@ PLATFORM_PATHS = (
     Path("etc/skel/.bashrc"),
     Path("etc/sddm.conf.d/10-najs-theme.conf"),
     Path("etc/xdg/autostart/najs-first-login.desktop"),
+    Path("etc/xdg/autostart/najs-welcome.desktop"),
     Path("etc/xdg/fastfetch"),
     Path("etc/xdg/kdeglobals"),
     Path("etc/xdg/konsolerc"),
@@ -30,13 +38,11 @@ PLATFORM_PATHS = (
     Path("usr/local/bin/najs-welcome-gui"),
     Path("usr/local/lib/najs/apply-desktop-branding"),
     Path("usr/share/applications/najs-about.desktop"),
-    Path("usr/local/share/applications/org.kde.plasma-welcome.desktop"),
-    Path("usr/local/share/applications/qml6.desktop"),
-    Path("usr/local/share/applications/qml.desktop"),
+    Path("usr/share/applications/najs-welcome.desktop"),
+    Path("usr/share/doc/najs/getting-started.html"),
     Path("usr/share/konsole/Najs.colorscheme"),
     Path("usr/share/konsole/Najs.profile"),
     Path("usr/share/najs/fastfetch"),
-    Path("usr/share/najs/welcome"),
     Path("usr/share/najs/plasma"),
     Path("usr/share/pixmaps/najs.svg"),
     Path("usr/share/plasma/look-and-feel/org.najs.desktop"),
@@ -45,29 +51,311 @@ PLATFORM_PATHS = (
     Path("usr/share/icons/hicolor/scalable/apps/najs.svg"),
     *(Path(f"usr/share/icons/hicolor/{size}x{size}/apps/najs.png") for size in (16, 32, 64, 128, 256)),
 )
-DEFAULT_SERVICES = (
-    "NetworkManager.service",
-    "avahi-daemon.service",
-    "bluetooth.service",
-    "cups.service",
-    "firewalld.service",
-    "fstrim.timer",
-    "najs-flatpak-setup.timer",
-    "power-profiles-daemon.service",
-    "sddm.service",
-    "vboxservice.service",
-)
 
 
-def verify_environment() -> None:
+class InstallerCancelled(Exception):
+    """Raised when the user exits the easy installer wizard."""
+
+
+def source_path(live_path: Path, relative_path: str) -> Path:
+    if live_path.exists():
+        return live_path
+    return Path(__file__).resolve().parent / relative_path
+
+
+def load_json(path: Path) -> dict[str, Any]:
+    with path.open(encoding="utf-8") as input_file:
+        value = json.load(input_file)
+    if not isinstance(value, dict):
+        raise ValueError(f"expected a JSON object in {path}")
+    return value
+
+
+def unique(values: list[str]) -> list[str]:
+    return list(dict.fromkeys(values))
+
+
+def parse_package_list(value: str) -> list[str]:
+    packages = [package for package in re.split(r"[\s,]+", value.strip()) if package]
+    invalid = [package for package in packages if not PACKAGE_NAME.fullmatch(package)]
+    if invalid:
+        raise ValueError(f"invalid package name: {', '.join(invalid)}")
+    return unique(packages)
+
+
+def prepare_config(
+    base_config: dict[str, Any],
+    catalog: dict[str, Any],
+    desktop_name: str,
+    use_case_name: str,
+    bundle_names: list[str] | None,
+    gpu_name: str,
+    hostname: str,
+    extra_packages: list[str],
+) -> dict[str, Any]:
+    desktops = catalog["desktops"]
+    use_cases = catalog["use_cases"]
+    bundles = catalog["bundles"]
+    gpus = catalog["gpus"]
+    if desktop_name not in desktops:
+        raise ValueError(f"unknown desktop: {desktop_name}")
+    if use_case_name not in use_cases:
+        raise ValueError(f"unknown use case: {use_case_name}")
+    if gpu_name not in gpus:
+        raise ValueError(f"unknown graphics choice: {gpu_name}")
+
+    selected_bundles = (
+        list(use_cases[use_case_name]["bundles"])
+        if bundle_names is None
+        else unique(bundle_names)
+    )
+    unknown_bundles = [name for name in selected_bundles if name not in bundles]
+    if unknown_bundles:
+        raise ValueError(f"unknown application group: {', '.join(unknown_bundles)}")
+
+    desktop = desktops[desktop_name]
+    gpu = gpus[gpu_name]
+    packages = list(catalog["base_packages"])
+    packages.extend(desktop.get("packages", []))
+    services = list(catalog["base_services"])
+    services.append(desktop["service"])
+    repositories: list[str] = ["multilib"]
+
+    for bundle_name in selected_bundles:
+        bundle = bundles[bundle_name]
+        packages.extend(bundle.get("packages", []))
+        services.extend(bundle.get("services", []))
+        repositories.extend(bundle.get("repositories", []))
+
+    if "gaming" in selected_bundles:
+        packages.extend(gpu.get("gaming_packages", []))
+    packages.extend(extra_packages)
+
+    config = copy.deepcopy(base_config)
+    config["hostname"] = hostname
+    config["packages"] = sorted(set(packages))
+    config["services"] = unique(services)
+    config["profile_config"] = {
+        "gfx_driver": gpu["driver"],
+        "greeter": desktop["greeter"],
+        "profile": {
+            "details": [desktop["profile"]],
+            "main": "Desktop",
+        },
+    }
+    mirror_config = config.setdefault("mirror_config", {})
+    mirror_config.setdefault("mirror_regions", {})
+    mirror_config.setdefault("custom_servers", [])
+    mirror_config["optional_repositories"] = sorted(set(repositories))
+    mirror_config.setdefault("custom_repositories", [])
+    config["najs"] = {
+        "schema": 1,
+        "desktop": desktop_name,
+        "desktop_label": desktop["label"],
+        "environment": desktop["environment"],
+        "session": desktop["session"],
+        "use_case": use_case_name,
+        "bundles": selected_bundles,
+        "gpu": gpu_name,
+        "extra_packages": extra_packages,
+    }
+    return config
+
+
+def write_config(path: Path, config: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+
+def run_dialog(arguments: list[str]) -> str:
+    result = subprocess.run(
+        ["dialog", "--stdout", "--no-collapse", *arguments],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode == 1:
+        raise InstallerCancelled
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "dialog failed")
+    return result.stdout.strip()
+
+
+def choose_one(
+    title: str,
+    prompt: str,
+    choices: dict[str, Any],
+    default: str,
+) -> str:
+    rows: list[str] = []
+    for name, entry in choices.items():
+        rows.extend(
+            [
+                name,
+                f"{entry['label']} - {entry['description']}",
+                "on" if name == default else "off",
+            ]
+        )
+    return run_dialog(
+        [
+            "--title",
+            title,
+            "--default-item",
+            default,
+            "--radiolist",
+            prompt,
+            "22",
+            "96",
+            str(len(choices)),
+            *rows,
+        ]
+    )
+
+
+def choose_bundles(catalog: dict[str, Any], use_case: str) -> list[str]:
+    defaults = set(catalog["use_cases"][use_case]["bundles"])
+    rows: list[str] = []
+    for name, bundle in catalog["bundles"].items():
+        rows.extend(
+            [
+                name,
+                f"{bundle['label']} - {bundle['description']}",
+                "on" if name in defaults else "off",
+            ]
+        )
+    output = run_dialog(
+        [
+            "--title",
+            "Grupy aplikacji",
+            "--separate-output",
+            "--checklist",
+            "Zaznacz spacja to, co ma zostac zainstalowane. Enter przechodzi dalej.",
+            "24",
+            "100",
+            str(len(catalog["bundles"])),
+            *rows,
+        ]
+    )
+    return [line for line in output.splitlines() if line]
+
+
+def wizard(catalog: dict[str, Any]) -> dict[str, Any]:
+    run_dialog(
+        [
+            "--title",
+            "Instalator Najs",
+            "--msgbox",
+            "Ten prosty kreator wybierze pulpit, sterownik i aplikacje.\n\n"
+            "W nastepnym kroku Archinstall poprosi o dysk, konto, jezyk i opcjonalne szyfrowanie. "
+            "Dysk nie zostanie zmieniony bez koncowego potwierdzenia.",
+            "13",
+            "76",
+        ]
+    )
+    desktop = choose_one(
+        "Wybierz pulpit",
+        "Jaki pulpit chcesz uruchamiac po zalogowaniu?",
+        catalog["desktops"],
+        "kde",
+    )
+    use_case = choose_one(
+        "Do czego sluzy komputer?",
+        "Wybierz gotowy punkt startowy. Za chwile mozna zmienic kazda grupe aplikacji.",
+        catalog["use_cases"],
+        "standard",
+    )
+    selected_bundles = choose_bundles(catalog, use_case)
+    gpu = choose_one(
+        "Karta graficzna",
+        "Wybierz karte graficzna. Gdy nie wiesz, zostaw wybor automatyczny.",
+        catalog["gpus"],
+        "auto",
+    )
+    hostname = run_dialog(
+        [
+            "--title",
+            "Nazwa komputera",
+            "--inputbox",
+            "Podaj krotka nazwe tego komputera:",
+            "10",
+            "70",
+            "najs",
+        ]
+    )
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9-]{0,62}", hostname):
+        raise ValueError("computer name may contain only letters, numbers, and hyphens")
+
+    additional = run_dialog(
+        [
+            "--title",
+            "Dodatkowe pakiety",
+            "--inputbox",
+            "Opcjonalnie wpisz nazwy dodatkowych pakietow Arch oddzielone spacjami. "
+            "Pozostaw puste, jesli niczego nie potrzebujesz:",
+            "11",
+            "86",
+        ]
+    )
+    extra_packages = parse_package_list(additional)
+    missing = [
+        package
+        for package in extra_packages
+        if subprocess.run(
+            ["pacman", "-Si", package],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        ).returncode
+        != 0
+    ]
+    if missing:
+        raise ValueError(f"packages not found in enabled repositories: {', '.join(missing)}")
+
+    bundle_labels = [catalog["bundles"][name]["label"] for name in selected_bundles]
+    summary = (
+        f"Pulpit: {catalog['desktops'][desktop]['label']}\n"
+        f"Zastosowanie: {catalog['use_cases'][use_case]['label']}\n"
+        f"Grafika: {catalog['gpus'][gpu]['label']}\n"
+        f"Nazwa komputera: {hostname}\n"
+        f"Grupy aplikacji: {', '.join(bundle_labels) if bundle_labels else 'brak'}\n"
+        f"Dodatkowe pakiety: {', '.join(extra_packages) if extra_packages else 'brak'}\n\n"
+        "Czy przejsc do wyboru dysku i konta uzytkownika?"
+    )
+    run_dialog(
+        [
+            "--title",
+            "Podsumowanie wyboru",
+            "--yes-label",
+            "Dalej",
+            "--no-label",
+            "Anuluj",
+            "--yesno",
+            summary,
+            "18",
+            "88",
+        ]
+    )
+    return {
+        "desktop": desktop,
+        "use_case": use_case,
+        "bundles": selected_bundles,
+        "gpu": gpu,
+        "hostname": hostname,
+        "extra_packages": extra_packages,
+    }
+
+
+def verify_environment(base_config_path: Path, catalog_path: Path) -> None:
     if not Path("/sys/firmware/efi").is_dir():
-        raise SystemExit("Najs pre-alpha installation currently requires UEFI boot")
-    if not shutil.which("archinstall"):
-        raise SystemExit("archinstall is not available in this live environment")
-    if not CONFIG.is_file():
-        raise SystemExit(f"installer preset is missing: {CONFIG}")
-    with CONFIG.open(encoding="utf-8") as config_file:
-        json.load(config_file)
+        raise SystemExit("Najs installation currently requires UEFI boot")
+    for command in ("archinstall", "dialog", "pacman"):
+        if not shutil.which(command):
+            raise SystemExit(f"{command} is not available in this live environment")
+    base_config = load_json(base_config_path)
+    catalog = load_json(catalog_path)
+    if catalog.get("version") != 1:
+        raise SystemExit("unsupported installer catalog version")
+    prepare_config(base_config, catalog, "kde", "standard", None, "auto", "najs", [])
 
 
 def initialize_keyring() -> None:
@@ -104,9 +392,39 @@ def copy_platform_files(target: Path) -> None:
             os.chown(bashrc, home_stat.st_uid, home_stat.st_gid)
 
 
-def provision_target(target: Path) -> None:
+def service_unit(service: str) -> str:
+    if service.endswith((".service", ".socket", ".timer")):
+        return service
+    return f"{service}.service"
+
+
+def unit_exists(target: Path, unit: str) -> bool:
+    return any(
+        (target / directory / unit).exists()
+        for directory in ("etc/systemd/system", "usr/lib/systemd/system")
+    )
+
+
+def toml_array(values: list[str]) -> str:
+    return "[" + ", ".join(json.dumps(value) for value in values) + "]"
+
+
+def provision_target(target: Path, config_path: Path) -> None:
     if not (target / "etc/os-release").exists():
         raise SystemExit(f"installed target is not mounted at {target}")
+
+    config = load_json(config_path)
+    selection = config.get("najs", {})
+    desktop = selection.get("environment", "plasma")
+    session = selection.get("session", "wayland")
+    bundles = selection.get("bundles", ["office", "media"])
+    enabled_profiles = unique(["desktop", *bundles])
+    services = unique([service_unit(service) for service in config.get("services", [])])
+    services.append("najs-flatpak-setup.timer")
+    services = unique(services)
+    packages = config.get("packages", [])
+    locale = config.get("locale_config", {}).get("sys_lang", "en_US") + ".UTF-8"
+    hostname = config.get("hostname", "najs")
 
     (target / "usr/bin").mkdir(parents=True, exist_ok=True)
     (target / "usr/share/najs/profiles").mkdir(parents=True, exist_ok=True)
@@ -123,42 +441,47 @@ def provision_target(target: Path) -> None:
         'PRETTY_NAME="Najs 0.1 Development"\nNAJS_GENERATION="initial"\n',
         encoding="utf-8",
     )
-    (target / "etc/najs/manifest.toml").write_text(
-        """version = 1
+    manifest = f"""version = 1
 
 [system]
-hostname = "najs"
-locale = "en_US.UTF-8"
+hostname = {json.dumps(hostname)}
+locale = {json.dumps(locale)}
 
 [desktop]
-environment = "plasma"
-session = "wayland"
+environment = {json.dumps(desktop)}
+session = {json.dumps(session)}
 
 [features]
 bluetooth = true
 printing = true
 
 [profiles]
-enabled = ["desktop"]
+enabled = {toml_array(enabled_profiles)}
 
 [packages]
-install = ["dolphin", "fastfetch", "firefox", "konsole", "libreoffice-fresh", "networkmanager", "plasma-meta"]
+install = {toml_array(packages)}
 remove = []
 
 [services]
-enable = ["NetworkManager.service", "avahi-daemon.service", "bluetooth.service", "cups.service", "firewalld.service", "fstrim.timer", "najs-flatpak-setup.timer", "power-profiles-daemon.service", "sddm.service", "vboxservice.service"]
+enable = {toml_array(services)}
 disable = []
-""",
-        encoding="utf-8",
-    )
-    subprocess.run(
-        ["systemctl", f"--root={target}", "enable", *DEFAULT_SERVICES],
-        check=True,
-    )
+"""
+    (target / "etc/najs/manifest.toml").write_text(manifest, encoding="utf-8")
+    for service in services:
+        if unit_exists(target, service):
+            subprocess.run(
+                ["systemctl", f"--root={target}", "enable", service],
+                check=True,
+            )
     (target / "var/lib/najs").mkdir(parents=True, exist_ok=True)
+    installation = {
+        "schema": 1,
+        "generation": "initial",
+        "installer": "archinstall",
+        "selection": selection,
+    }
     (target / "var/lib/najs/installation.json").write_text(
-        json.dumps({"schema": 1, "generation": "initial", "installer": "archinstall"})
-        + "\n",
+        json.dumps(installation, indent=2) + "\n",
         encoding="utf-8",
     )
     if os.path.ismount(target / "boot"):
@@ -172,36 +495,83 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="validate installer prerequisites without touching disks",
     )
+    parser.add_argument("--generate-config", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--base-config", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--catalog", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--desktop", default="kde", help=argparse.SUPPRESS)
+    parser.add_argument("--use-case", default="standard", help=argparse.SUPPRESS)
+    parser.add_argument("--bundles", help=argparse.SUPPRESS)
+    parser.add_argument("--gpu", default="auto", help=argparse.SUPPRESS)
+    parser.add_argument("--hostname", default="najs", help=argparse.SUPPRESS)
+    parser.add_argument("--extra-packages", default="", help=argparse.SUPPRESS)
     parser.add_argument("--provision-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--target", type=Path, default=TARGET, help=argparse.SUPPRESS)
+    parser.add_argument("--config", type=Path, default=LIVE_CONFIG, help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    base_config_path = args.base_config or source_path(LIVE_BASE_CONFIG, "archinstall/config.json")
+    catalog_path = args.catalog or source_path(LIVE_CATALOG, "catalog.json")
+
+    if args.generate_config:
+        bundle_names = args.bundles.split(",") if args.bundles is not None else None
+        config = prepare_config(
+            load_json(base_config_path),
+            load_json(catalog_path),
+            args.desktop,
+            args.use_case,
+            bundle_names,
+            args.gpu,
+            args.hostname,
+            parse_package_list(args.extra_packages),
+        )
+        write_config(args.generate_config, config)
+        print(f"Generated Najs installer configuration: {args.generate_config}")
+        return
+
     if args.provision_only:
         if os.environ.get("NAJS_INSTALL_TEST") != "1":
             raise SystemExit("provision-only mode is restricted to the VM test harness")
         if os.geteuid() != 0:
             raise SystemExit("provision-only mode requires root")
-        provision_target(args.target)
+        provision_target(args.target, args.config)
         return
 
-    verify_environment()
+    verify_environment(base_config_path, catalog_path)
     if args.check:
-        print("Najs installer prerequisites: ok")
+        print("Najs installer prerequisites and catalog: ok")
         return
     if os.geteuid() != 0:
         raise SystemExit("run the Najs installer as root")
 
+    try:
+        selected = wizard(load_json(catalog_path))
+    except InstallerCancelled:
+        raise SystemExit("Installation cancelled; no disk was changed") from None
+    except (RuntimeError, ValueError) as error:
+        raise SystemExit(f"Installer selection failed: {error}") from error
+
+    config = prepare_config(
+        load_json(base_config_path),
+        load_json(catalog_path),
+        selected["desktop"],
+        selected["use_case"],
+        selected["bundles"],
+        selected["gpu"],
+        selected["hostname"],
+        selected["extra_packages"],
+    )
+    write_config(GENERATED_CONFIG, config)
     initialize_keyring()
-    print("Archinstall will ask for the target disk, encryption, locale, and user account.")
-    print("Review the installation summary carefully before confirming disk changes.")
-    result = subprocess.run(["archinstall", "--config", str(CONFIG)], check=False)
+    print("Archinstall will now ask for the disk, locale, user account, and encryption.")
+    print("Review its installation summary carefully before confirming disk changes.")
+    result = subprocess.run(["archinstall", "--config", str(GENERATED_CONFIG)], check=False)
     if result.returncode != 0:
         raise SystemExit(f"archinstall exited with status {result.returncode}")
-    provision_target(TARGET)
-    print("Najs platform layer provisioned. Reboot only after Archinstall has completed.")
+    provision_target(TARGET, GENERATED_CONFIG)
+    print("Najs is installed. Remove the installation media and reboot.")
 
 
 if __name__ == "__main__":

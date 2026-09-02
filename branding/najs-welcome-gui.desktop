@@ -2,9 +2,8 @@
 Type=Application
 Name=Najs Welcome
 GenericName=Welcome Center
-Comment=Learn how Najs is different
+Comment=Open settings, software, files, help, and system diagnostics
 Exec=/usr/local/bin/najs-welcome-gui
 Icon=najs
 Terminal=false
-Categories=Qt;KDE;Documentation;
-OnlyShowIn=KDE;
+Categories=System;Settings;

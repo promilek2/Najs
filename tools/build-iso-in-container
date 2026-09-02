@@ -14,7 +14,12 @@ cargo build --locked --release --package najs-cli
 install -Dm755 target/release/najs "${profile}/airootfs/usr/local/bin/najs"
 install -Dm644 profiles/*.toml -t "${profile}/airootfs/usr/share/najs/profiles"
 install -Dm755 installer/najs-install "${profile}/airootfs/usr/local/bin/najs-install"
-install -Dm644 installer/archinstall/config.json "${profile}/airootfs/usr/share/najs/installer/archinstall.json"
+install -Dm644 installer/archinstall/config.json "${profile}/airootfs/usr/share/najs/installer/base.json"
+install -Dm644 installer/catalog.json "${profile}/airootfs/usr/share/najs/installer/catalog.json"
+python installer/najs-install \
+  --generate-config "${profile}/airootfs/usr/share/najs/installer/archinstall.json" \
+  --base-config installer/archinstall/config.json \
+  --catalog installer/catalog.json
 install -Dm644 installer/najs-installer.desktop "${profile}/airootfs/usr/share/applications/najs-installer.desktop"
 
 install -Dm644 branding/logo.svg "${profile}/airootfs/usr/share/icons/hicolor/scalable/apps/najs.svg"
@@ -41,17 +46,16 @@ install -Dm644 branding/Najs.profile "${profile}/airootfs/usr/share/konsole/Najs
 install -Dm644 branding/kdeglobals "${profile}/airootfs/etc/xdg/kdeglobals"
 install -Dm644 branding/konsolerc "${profile}/airootfs/etc/xdg/konsolerc"
 install -Dm644 branding/najs-first-login.desktop "${profile}/airootfs/etc/xdg/autostart/najs-first-login.desktop"
+install -Dm644 branding/najs-welcome-autostart.desktop "${profile}/airootfs/etc/xdg/autostart/najs-welcome.desktop"
 install -Dm755 branding/apply-desktop-branding "${profile}/airootfs/usr/local/lib/najs/apply-desktop-branding"
 install -d "${profile}/airootfs/usr/share/plasma/look-and-feel"
 cp -a branding/look-and-feel "${profile}/airootfs/usr/share/plasma/look-and-feel/org.najs.desktop"
 install -Dm644 branding/sddm-theme.conf.user "${profile}/airootfs/usr/share/sddm/themes/breeze/theme.conf.user"
 install -Dm644 branding/najs-about.desktop "${profile}/airootfs/usr/share/applications/najs-about.desktop"
-install -Dm644 branding/najs-welcome-gui.desktop "${profile}/airootfs/usr/local/share/applications/org.kde.plasma-welcome.desktop"
-install -Dm644 branding/qml6.desktop "${profile}/airootfs/usr/local/share/applications/qml6.desktop"
-install -Dm644 branding/qml6.desktop "${profile}/airootfs/usr/local/share/applications/qml.desktop"
+install -Dm644 branding/najs-welcome-gui.desktop "${profile}/airootfs/usr/share/applications/najs-welcome.desktop"
 install -Dm755 branding/najs-welcome "${profile}/airootfs/usr/bin/najs-welcome"
 install -Dm755 branding/najs-welcome-gui "${profile}/airootfs/usr/local/bin/najs-welcome-gui"
-install -Dm644 branding/welcome.qml "${profile}/airootfs/usr/share/najs/welcome/main.qml"
+install -Dm644 branding/getting-started.html "${profile}/airootfs/usr/share/doc/najs/getting-started.html"
 install -Dm644 branding/plasma-layout.js "${profile}/airootfs/usr/share/najs/plasma/layout.js"
 
 install -d \

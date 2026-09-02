@@ -20,6 +20,8 @@ hardware, and complete visual review of the integrated Najs Fold identity.
 
 - Archinstall integration with Najs provisioning, Btrfs, and systemd-boot.
 - Automated blank-disk QEMU install and reboot test (verified baseline).
+- Easy desktop, graphics, use-case, and application-group selection wizard.
+- KDE Plasma, GNOME, Hyprland, Xfce, and Cinnamon installation profiles.
 
 ## M3: transactions and generations
 
@@ -31,7 +33,8 @@ hardware, and complete visual review of the integrated Najs Fold identity.
 ## M4: declarative system
 
 - `najs apply`, profile expansion, managed-file ownership, and conflict policy.
-- Gaming and development profiles with hardware-aware package resolution.
+- CLI-driven profile expansion and hardware-aware post-install changes. The
+  installer catalog already resolves gaming GPU libraries and application groups.
 
 ## Alpha gates
 

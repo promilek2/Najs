@@ -19,10 +19,11 @@ A new installer would duplicate risky partitioning and encryption work.
 ## Decision
 
 Use the signed upstream Archinstall package for the pre-alpha installation
-prototype. Najs supplies a non-secret preset and a small wrapper. Archinstall
-owns disk, filesystem, bootloader, account, and package operations. After a
-successful installation, the wrapper provisions the Najs release metadata,
-manifest, profiles, and CLI into the mounted target.
+prototype. Najs supplies a non-secret catalog and an easy selection wizard that
+generates the preset. Archinstall owns disk, filesystem, bootloader, account, and
+package operations. After a successful installation, the wrapper provisions the
+Najs release metadata, manifest, profiles, welcome center, and CLI into the
+mounted target.
 
 No credential file is stored in the ISO or repository. Disk and user choices
 remain interactive. The wrapper refuses non-UEFI installation in this phase.

@@ -1,0 +1,12 @@
+version = 1
+name = "office"
+description = "Office documents, PDF support, and spell checking"
+
+[packages]
+install = ["hunspell-en_us", "hunspell-pl", "libreoffice-fresh", "okular"]
+
+[services]
+enable = []
+
+[configuration]
+managed_files = []

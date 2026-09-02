@@ -22,7 +22,9 @@ Btrfs root generation + matching UKI
 ## Version-one boundaries
 
 - Arch Linux is an upstream and bootstrap source, not the product identity.
-- KDE Plasma on Wayland is the supported desktop.
+- KDE Plasma on Wayland is the live and reference desktop. Installed systems may
+  select KDE Plasma, GNOME, Hyprland, Xfce, or Cinnamon through the tested
+  Archinstall profile interface.
 - Pacman remains the low-level package manager.
 - TOML manifests describe packages, services, profiles, and selected settings.
 - A transaction will modify a writable clone of the active Btrfs root.

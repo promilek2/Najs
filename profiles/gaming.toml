@@ -3,7 +3,25 @@ name = "gaming"
 description = "Gaming runtime for supported x86-64 hardware"
 
 [packages]
-install = ["gamemode", "gamescope", "lib32-mesa", "mangohud", "steam", "vulkan-icd-loader"]
+install = [
+  "discord",
+  "gamemode",
+  "gamescope",
+  "lib32-mesa",
+  "lib32-vulkan-icd-loader",
+  "lutris",
+  "mangohud",
+  "obs-studio",
+  "protontricks",
+  "steam",
+  "vulkan-icd-loader",
+  "vulkan-tools",
+  "wine",
+  "wine-gecko",
+  "wine-mono",
+  "winetricks",
+  "yad",
+]
 
 [services]
 enable = []

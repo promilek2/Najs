@@ -13,10 +13,10 @@ bluetooth = true
 printing = true
 
 [profiles]
-enabled = ["desktop"]
+enabled = ["desktop", "office", "media"]
 
 [packages]
-install = ["dolphin", "fastfetch", "firefox", "konsole", "libreoffice-fresh", "networkmanager", "plasma-meta"]
+install = ["dolphin", "fastfetch", "firefox", "konsole", "libreoffice-fresh", "networkmanager", "okular", "plasma-meta", "vlc", "zenity"]
 remove = []
 
 [services]

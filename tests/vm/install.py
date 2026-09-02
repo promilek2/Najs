@@ -8,6 +8,7 @@ import json
 import secrets
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -35,15 +36,37 @@ def password_hash(openssl: str) -> str:
 
 
 def write_inputs(output: Path, openssl: str) -> tuple[Path, Path]:
-    preset = Path(__file__).resolve().parents[2] / "installer/archinstall/config.json"
-    config = json.loads(preset.read_text(encoding="utf-8"))
+    root = Path(__file__).resolve().parents[2]
+    installer = root / "installer/najs-install"
+    config_path = output / "config.json"
+    subprocess.run(
+        [
+            sys.executable,
+            str(installer),
+            "--generate-config",
+            str(config_path),
+            "--base-config",
+            str(root / "installer/archinstall/config.json"),
+            "--catalog",
+            str(root / "installer/catalog.json"),
+            "--desktop",
+            "kde",
+            "--use-case",
+            "standard",
+            "--gpu",
+            "auto",
+            "--hostname",
+            "najs-vm",
+        ],
+        check=True,
+    )
+    config = json.loads(config_path.read_text(encoding="utf-8"))
     config.update(
         {
             "disk_config": {
                 "config_type": "pre_mounted_config",
                 "mountpoint": "/mnt/archinstall",
             },
-            "hostname": "najs-vm",
             "silent": True,
         }
     )
@@ -58,7 +81,6 @@ def write_inputs(output: Path, openssl: str) -> tuple[Path, Path]:
             }
         ],
     }
-    config_path = output / "config.json"
     credentials_path = output / "credentials.json"
     config_path.write_text(json.dumps(config), encoding="utf-8")
     credentials_path.write_text(json.dumps(credentials), encoding="utf-8")

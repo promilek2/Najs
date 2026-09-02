@@ -1,0 +1,12 @@
+version = 1
+name = "virtualization"
+description = "Local QEMU/KVM and libvirt virtual machines"
+
+[packages]
+install = ["dnsmasq", "edk2-ovmf", "libvirt", "qemu-full", "virt-manager"]
+
+[services]
+enable = ["libvirtd.service"]
+
+[configuration]
+managed_files = []

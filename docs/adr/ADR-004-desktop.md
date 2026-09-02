@@ -1,12 +1,15 @@
 # ADR-004: KDE Plasma on Wayland
 
-- Status: accepted for v1
+- Status: superseded for installed systems by ADR-007
 - Date: 2026-08-31
 
 ## Decision
 
 Ship KDE Plasma with Wayland as the single supported v1 desktop. Use SDDM,
 NetworkManager, PipeWire, XDG portals, and Konsole in the live environment.
+
+KDE Plasma remains the live and reference desktop. ADR-007 expands the tested
+installation choices without changing the live ISO desktop.
 
 ## Rationale
 

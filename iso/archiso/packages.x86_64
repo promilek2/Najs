@@ -15,6 +15,7 @@ cups-pdf
 cups-pk-helper
 curl
 dhcpcd
+dialog
 diffutils
 dmidecode
 dolphin
@@ -92,9 +93,11 @@ unzip
 usb_modeswitch
 vim
 virtualbox-guest-utils
+vlc
 wget
 wireplumber
 wpa_supplicant
 xdg-desktop-portal-kde
 xfsprogs
+zenity
 zip

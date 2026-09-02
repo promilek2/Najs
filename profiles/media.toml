@@ -1,0 +1,12 @@
+version = 1
+name = "media"
+description = "Common audio, video, and image applications"
+
+[packages]
+install = ["gwenview", "vlc"]
+
+[services]
+enable = []
+
+[configuration]
+managed_files = []

@@ -1,4 +1,81 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-exec qml6 /usr/share/najs/welcome/main.qml
+readonly config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/najs"
+readonly disabled_marker="${config_dir}/welcome-disabled"
+
+if [[ "${1:-}" == --autostart && -e "${disabled_marker}" ]]; then
+  exit 0
+fi
+
+open_settings() {
+  local command
+  for command in systemsettings gnome-control-center cinnamon-settings xfce4-settings-manager nwg-look; do
+    if command -v "${command}" >/dev/null 2>&1; then
+      "${command}" >/dev/null 2>&1 &
+      return
+    fi
+  done
+  zenity --info --title="Najs Welcome" --text="System settings were not found for this desktop."
+}
+
+open_software() {
+  local command
+  for command in plasma-discover gnome-software; do
+    if command -v "${command}" >/dev/null 2>&1; then
+      "${command}" >/dev/null 2>&1 &
+      return
+    fi
+  done
+  xdg-open "https://flathub.org" >/dev/null 2>&1 &
+}
+
+open_doctor() {
+  local shell_command='najs doctor; printf "\nPress Enter to close..."; read -r'
+  if command -v konsole >/dev/null 2>&1; then
+    konsole -e bash -lc "${shell_command}" >/dev/null 2>&1 &
+  elif command -v kgx >/dev/null 2>&1; then
+    kgx -- bash -lc "${shell_command}" >/dev/null 2>&1 &
+  elif command -v gnome-terminal >/dev/null 2>&1; then
+    gnome-terminal -- bash -lc "${shell_command}" >/dev/null 2>&1 &
+  elif command -v kitty >/dev/null 2>&1; then
+    kitty bash -lc "${shell_command}" >/dev/null 2>&1 &
+  elif command -v xfce4-terminal >/dev/null 2>&1; then
+    xfce4-terminal -e "bash -lc '${shell_command}'" >/dev/null 2>&1 &
+  else
+    zenity --info --title="Najs system check" --text="Open a terminal and run: najs doctor"
+  fi
+}
+
+while true; do
+  choice="$(zenity \
+    --list \
+    --title="Welcome to Najs" \
+    --text="Choose what you want to do. You can open Najs Welcome later from the application menu." \
+    --width=720 \
+    --height=470 \
+    --column="Action" \
+    --column="What it does" \
+    "System settings" "Display, network, sound, users, and desktop options" \
+    "Install applications" "Open the graphical software center or Flathub" \
+    "Open files" "Open your home folder" \
+    "System check" "Run the built-in Najs diagnostic" \
+    "Getting started" "Open the short local help page" \
+    "Do not show at login" "Keep Najs Welcome in the application menu only" \
+    "Close" "Start using the computer" \
+    2>/dev/null)" || exit 0
+
+  case "${choice}" in
+    "System settings") open_settings ;;
+    "Install applications") open_software ;;
+    "Open files") xdg-open "${HOME}" >/dev/null 2>&1 & ;;
+    "System check") open_doctor ;;
+    "Getting started") xdg-open "/usr/share/doc/najs/getting-started.html" >/dev/null 2>&1 & ;;
+    "Do not show at login")
+      install -d "${config_dir}"
+      touch "${disabled_marker}"
+      exit 0
+      ;;
+    "Close"|"") exit 0 ;;
+  esac
+done
