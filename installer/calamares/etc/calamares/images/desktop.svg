@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="380" viewBox="0 0 760 380">
+  <defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#162c3b"/><stop offset="1" stop-color="#09131d"/></linearGradient></defs>
+  <rect width="760" height="380" rx="24" fill="url(#g)"/>
+  <rect x="150" y="66" width="460" height="244" rx="17" fill="#0b1722" stroke="#67b7ff" stroke-width="6"/>
+  <rect x="174" y="91" width="412" height="171" rx="10" fill="#132b3b"/>
+  <path d="M174 227l105-82 70 53 61-47 176 111H174z" fill="#55d6be" opacity=".65"/>
+  <circle cx="510" cy="132" r="28" fill="#ffb86b"/>
+  <rect x="315" y="310" width="130" height="12" rx="6" fill="#67b7ff"/>
+  <text x="380" y="356" fill="#dce8ef" font-family="sans-serif" font-size="22" text-anchor="middle">MAKE THE DESKTOP YOURS</text>
+</svg>

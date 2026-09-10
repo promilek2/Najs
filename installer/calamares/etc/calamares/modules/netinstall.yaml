@@ -1,0 +1,36 @@
+- name: Office and documents
+  description: LibreOffice, PDF tools, and English and Polish dictionaries.
+  selected: true
+  packages: [ hunspell-en_us, hunspell-pl, libreoffice-fresh, okular ]
+- name: Multimedia
+  description: Music, video, and image playback with broad codec support.
+  selected: true
+  packages: [ gwenview, vlc ]
+- name: Gaming
+  description: Steam, Lutris, Wine, GameMode, Gamescope, MangoHud, Discord, and OBS.
+  selected: false
+  packages: [ discord, gamemode, gamescope, lib32-vulkan-icd-loader, lutris, mangohud, obs-studio, protontricks, steam, vulkan-icd-loader, vulkan-tools, wine, wine-gecko, wine-mono, winetricks, yad ]
+- name: Creative studio
+  description: Blender, Krita, GIMP, Inkscape, Kdenlive, Audacity, and OBS Studio.
+  selected: false
+  packages: [ audacity, blender, gimp, inkscape, kdenlive, krita, obs-studio ]
+- name: Development
+  description: C/C++ tools, Visual Studio Code, GitHub CLI, Rust, Python, Node.js, Podman, and Distrobox.
+  selected: false
+  packages: [ base-devel, code, distrobox, github-cli, nodejs, npm, podman, python-pip, rustup ]
+- name: Communication
+  description: Discord, Signal, Telegram, and Thunderbird.
+  selected: false
+  packages: [ discord, signal-desktop, telegram-desktop, thunderbird ]
+- name: Virtualization
+  description: QEMU/KVM, libvirt, firmware, and Virtual Machine Manager.
+  selected: false
+  packages: [ dnsmasq, edk2-ovmf, libvirt, qemu-full, virt-manager ]
+- name: Accessibility
+  description: Screen reader, speech synthesis, and accessibility support.
+  selected: false
+  packages: [ espeak-ng, orca, speech-dispatcher ]
+- name: Advanced system tools
+  description: Disk health, partitioning, terminal editing, synchronization, and diagnostics.
+  selected: false
+  packages: [ gparted, htop, neovim, rsync, smartmontools ]

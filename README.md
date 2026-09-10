@@ -22,22 +22,29 @@ najs status
 najs doctor
 najs validate --manifest manifest.toml
 najs diff --manifest manifest.toml
+najs completions bash
 ```
 
 `najs diff` is read-only. Applying manifests and package transactions will be
 added only with snapshot isolation and durable transaction records.
+Completion definitions for Bash, Zsh, and Fish are installed system-wide in
+Najs. `najs completions <shell>` can also generate them on demand.
 
 ## Installer choices
 
-The **Install Najs** launcher starts a simple selection wizard before handing
-disk, encryption, account, and bootloader work to Archinstall. It offers:
+The **Cocky Installer** icon is placed directly on the live desktop and starts
+the Najs dialog wizard in Konsole. It keeps the original keyboard-driven look
+while using the current validated Archinstall backend. It offers:
 
 - KDE Plasma, GNOME, Hyprland, Xfce, or Cinnamon
 - automatic, AMD, Intel, recent NVIDIA, or virtual-machine graphics setup
-- Minimal, Daily, Gamer, Creator, Developer, or Everything starting points
+- safe whole-disk installation with Btrfs, ext4, XFS, optional LUKS, and zram
+- systemd-boot or GRUB and Stable, LTS, Zen, or Hardened kernels
 - independently selectable Office, Media, Gaming, Creator, Development,
   Communication, and Virtualization application groups
-- an optional field for additional official Arch package names
+
+The pinned Calamares frontend remains available as an optional advanced tool
+for manual partitioning and F2FS, but it is no longer the default launcher.
 
 Every installation includes:
 

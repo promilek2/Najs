@@ -57,19 +57,18 @@ def write_inputs(output: Path, openssl: str) -> tuple[Path, Path]:
             "auto",
             "--hostname",
             "najs-vm",
+            "--disk",
+            "/dev/vda",
+            "--disk-size",
+            str(40 * 1024**3),
+            "--sector-size",
+            "512",
+            "--filesystem",
+            "btrfs",
         ],
         check=True,
     )
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    config.update(
-        {
-            "disk_config": {
-                "config_type": "pre_mounted_config",
-                "mountpoint": "/mnt/archinstall",
-            },
-            "silent": True,
-        }
-    )
     hashed_password = password_hash(openssl)
     credentials = {
         "root_enc_password": hashed_password,

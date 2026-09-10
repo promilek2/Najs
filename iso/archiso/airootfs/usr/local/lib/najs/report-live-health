@@ -63,10 +63,46 @@ sleep 30
     echo "najs-cli: failed"
     health=failed
   fi
+  status_output="$(/usr/local/bin/najs status 2>&1)"
+  if grep -qx 'system: Najs' <<<"${status_output}" \
+    && grep -qx 'manifest: available' <<<"${status_output}" \
+    && grep -qx 'pacman: available' <<<"${status_output}" \
+    && grep -qx 'systemd: available' <<<"${status_output}" \
+    && grep -qx 'transactions: unavailable (planned for M3)' <<<"${status_output}"; then
+    echo "najs-status: ok"
+  else
+    printf '%s\n' "${status_output}"
+    echo "najs-status: failed"
+    health=failed
+  fi
+  if [[ -r /usr/share/bash-completion/completions/najs ]] \
+    && [[ -r /usr/share/zsh/site-functions/_najs ]] \
+    && [[ -r /usr/share/fish/vendor_completions.d/najs.fish ]] \
+    && /usr/local/bin/najs completions bash | grep -q 'doctor'; then
+    echo "najs-completions: ok"
+  else
+    echo "najs-completions: failed"
+    health=failed
+  fi
   if /usr/local/bin/najs-install --check; then
     echo "najs-installer: ok"
   else
     echo "najs-installer: failed"
+    health=failed
+  fi
+  if [[ -x "/home/najs/Desktop/Install Najs.desktop" ]] \
+    && grep -qx 'Name=Cocky Installer' "/home/najs/Desktop/Install Najs.desktop" \
+    && grep -qx 'Exec=konsole -e sudo /usr/local/bin/najs-install' "/home/najs/Desktop/Install Najs.desktop"; then
+    echo "cocky-installer: ok"
+  else
+    echo "cocky-installer: failed"
+    health=failed
+  fi
+  if QT_QPA_PLATFORM=offscreen calamares --version >/dev/null \
+    && [[ -r /etc/calamares/settings.conf ]]; then
+    echo "calamares-installer: ok"
+  else
+    echo "calamares-installer: failed"
     health=failed
   fi
   if [[ -r /usr/share/icons/hicolor/scalable/apps/najs.svg ]] \
@@ -96,12 +132,16 @@ sleep 30
     echo "desktop-branding: failed"
     health=failed
   fi
-  if /usr/local/bin/najs doctor; then
+  doctor_report="$(mktemp)"
+  if /usr/local/bin/najs doctor --json >"${doctor_report}" \
+    && jq -e '.system == "Najs" and .ok == true and (.checks | type == "array") and all(.checks[]; .passed == true)' "${doctor_report}" >/dev/null; then
     echo "najs-doctor: ok"
   else
+    cat "${doctor_report}"
     echo "najs-doctor: failed"
     health=failed
   fi
+  rm -f "${doctor_report}"
   if loginctl --no-legend list-sessions | grep -Eq "[[:space:]]1000[[:space:]]+najs[[:space:]]+seat0"; then
     echo "plasma-session: active"
   else

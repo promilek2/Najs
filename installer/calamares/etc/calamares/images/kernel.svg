@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="380" viewBox="0 0 760 380">
+  <defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#242246"/><stop offset="1" stop-color="#09131d"/></linearGradient></defs>
+  <rect width="760" height="380" rx="24" fill="url(#g)"/>
+  <rect x="278" y="74" width="204" height="204" rx="24" fill="#111c2d" stroke="#a98bff" stroke-width="7"/>
+  <g stroke="#a98bff" stroke-width="9" stroke-linecap="round"><path d="M305 48v26m50-26v26m50-26v26m50-26v26M305 278v26m50-26v26m50-26v26m50-26v26M252 101h26m-26 50h26m-26 50h26m-26 50h26M482 101h26m-26 50h26m-26 50h26m-26 50h26"/></g>
+  <text x="380" y="201" fill="#f4fbff" font-family="sans-serif" font-size="56" font-weight="bold" text-anchor="middle">N</text>
+  <text x="380" y="350" fill="#dce8ef" font-family="sans-serif" font-size="23" text-anchor="middle">CHOOSE YOUR SYSTEM CORE</text>
+</svg>

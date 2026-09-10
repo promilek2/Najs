@@ -280,6 +280,16 @@ def test_vm() -> None:
             os.environ.get("NAJS_VM_WAIT", "120"),
             "--login-after",
             os.environ.get("NAJS_VM_LOGIN_AFTER", "0"),
+            "--launch-installer-after",
+            os.environ.get("NAJS_VM_LAUNCH_INSTALLER_AFTER", "0"),
+            "--installer-command",
+            os.environ.get("NAJS_VM_INSTALLER_COMMAND", "sudo /usr/local/bin/najs-calamares"),
+            "--walk-installer-pages",
+            os.environ.get("NAJS_VM_WALK_INSTALLER_PAGES", "0"),
+            "--installer-keys",
+            os.environ.get("NAJS_VM_INSTALLER_KEYS", ""),
+            "--keep-installer-disk",
+            os.environ.get("NAJS_VM_KEEP_INSTALLER_DISK", "0"),
         ]
     )
 

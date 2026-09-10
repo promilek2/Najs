@@ -4,6 +4,16 @@ set -euo pipefail
 readonly root=/src
 readonly work=/tmp/najs-archiso
 readonly profile="${work}/profile"
+readonly calamares_version=3.4.2-13
+readonly calamares_archive="cachyos-calamares-next-${calamares_version}-x86_64.pkg.tar.zst"
+readonly calamares_sha256=17bd538c06dce45e2a60e1950de1f4453aa6403caaded459ed8d71eb203be0f8
+readonly calamares_cache="/var/cache/pacman/pkg/${calamares_archive}"
+readonly ckbcomp_archive=ckbcomp-1.249-1-any.pkg.tar.zst
+readonly ckbcomp_sha256=2c8ca7708a26d352ad31cc35c4ae2ec368cb7ce4ffb5de0fd179c17b4803c5dd
+readonly ckbcomp_cache="/var/cache/pacman/pkg/${ckbcomp_archive}"
+readonly boost_compat_archive=boost-libs-1.91.0-2-x86_64.pkg.tar.zst
+readonly boost_compat_sha256=62cfd278b0260bd2ce5c93f6ab4669d2eefe840eab19e2c3854762f295924655
+readonly boost_compat_cache="/var/cache/pacman/pkg/${boost_compat_archive}"
 
 rm -rf "${work}"
 install -d "${profile}" "${root}/out"
@@ -12,15 +22,65 @@ cp -a "${root}/iso/archiso/." "${profile}/"
 cd "${root}"
 cargo build --locked --release --package najs-cli
 install -Dm755 target/release/najs "${profile}/airootfs/usr/local/bin/najs"
+install -d \
+  "${profile}/airootfs/usr/share/bash-completion/completions" \
+  "${profile}/airootfs/usr/share/zsh/site-functions" \
+  "${profile}/airootfs/usr/share/fish/vendor_completions.d"
+target/release/najs completions bash >"${profile}/airootfs/usr/share/bash-completion/completions/najs"
+target/release/najs completions zsh >"${profile}/airootfs/usr/share/zsh/site-functions/_najs"
+target/release/najs completions fish >"${profile}/airootfs/usr/share/fish/vendor_completions.d/najs.fish"
 install -Dm644 profiles/*.toml -t "${profile}/airootfs/usr/share/najs/profiles"
 install -Dm755 installer/najs-install "${profile}/airootfs/usr/local/bin/najs-install"
+install -Dm755 installer/najs-calamares "${profile}/airootfs/usr/local/bin/najs-calamares"
 install -Dm644 installer/archinstall/config.json "${profile}/airootfs/usr/share/najs/installer/base.json"
 install -Dm644 installer/catalog.json "${profile}/airootfs/usr/share/najs/installer/catalog.json"
 python installer/najs-install \
   --generate-config "${profile}/airootfs/usr/share/najs/installer/archinstall.json" \
   --base-config installer/archinstall/config.json \
   --catalog installer/catalog.json
+
+if [[ ! -f "${calamares_cache}" ]]; then
+  curl --fail --location \
+    "https://mirror.cachyos.org/repo/x86_64/cachyos/${calamares_archive}" \
+    --output "${calamares_cache}"
+fi
+printf '%s  %s\n' "${calamares_sha256}" "${calamares_cache}" | sha256sum --check
+if [[ ! -f "${ckbcomp_cache}" ]]; then
+  curl --fail --location \
+    "https://mirror.cachyos.org/repo/x86_64/cachyos/${ckbcomp_archive}" \
+    --output "${ckbcomp_cache}"
+fi
+printf '%s  %s\n' "${ckbcomp_sha256}" "${ckbcomp_cache}" | sha256sum --check
+if [[ ! -f "${boost_compat_cache}" ]]; then
+  curl --fail --location \
+    "https://archive.archlinux.org/packages/b/boost-libs/${boost_compat_archive}" \
+    --output "${boost_compat_cache}"
+fi
+printf '%s  %s\n' "${boost_compat_sha256}" "${boost_compat_cache}" | sha256sum --check
+bsdtar -xf "${calamares_cache}" -C "${profile}/airootfs" \
+  --exclude .BUILDINFO --exclude .MTREE --exclude .PKGINFO
+bsdtar -xf "${ckbcomp_cache}" -C "${profile}/airootfs" \
+  --exclude .BUILDINFO --exclude .MTREE --exclude .PKGINFO
+bsdtar -xf "${boost_compat_cache}" -C "${profile}/airootfs" \
+  usr/lib/libboost_container.so.1.91.0 \
+  usr/lib/libboost_graph.so.1.91.0 \
+  usr/lib/libboost_python314.so.1.91.0
+install -Dm755 \
+  "${profile}/airootfs/etc/calamares/scripts/pacstrap_calamares" \
+  "${profile}/airootfs/usr/local/lib/najs/pacstrap_calamares"
+rm -rf \
+  "${profile}/airootfs/etc/calamares" \
+  "${profile}/airootfs/usr/share/calamares/branding/cachyos"
+rm -f \
+  "${profile}/airootfs/usr/share/applications/calamares.desktop" \
+  "${profile}/airootfs/usr/share/calamares/settings.conf" \
+  "${profile}/airootfs/usr/share/calamares/settings_offline.conf" \
+  "${profile}/airootfs/usr/share/calamares/settings_online.conf"
+cp -a installer/calamares/etc/calamares "${profile}/airootfs/etc/"
+install -Dm755 installer/calamares/scripts/pacstrap_calamares \
+  "${profile}/airootfs/etc/calamares/scripts/pacstrap_calamares"
 install -Dm644 installer/najs-installer.desktop "${profile}/airootfs/usr/share/applications/najs-installer.desktop"
+install -Dm755 installer/najs-installer.desktop "${profile}/airootfs/etc/skel/Desktop/Install Najs.desktop"
 
 install -Dm644 branding/logo.svg "${profile}/airootfs/usr/share/icons/hicolor/scalable/apps/najs.svg"
 install -Dm644 branding/logo.svg "${profile}/airootfs/usr/share/pixmaps/najs.svg"
@@ -35,12 +95,19 @@ install -d "$(dirname "${wallpaper}")"
 rsvg-convert -w 2560 -h 1600 branding/wallpaper.svg -o "${wallpaper}"
 install -Dm644 branding/wallpaper.svg "${profile}/airootfs/usr/share/wallpapers/Najs/contents/images/2560x1600.svg"
 install -Dm644 branding/wallpaper-metadata.json "${profile}/airootfs/usr/share/wallpapers/Najs/metadata.json"
+branding_dir="${profile}/airootfs/etc/calamares/branding/najs"
+rsvg-convert -w 512 -h 512 branding/logo.svg -o "${branding_dir}/logo.png"
+rsvg-convert -w 128 -h 128 branding/logo.svg -o "${branding_dir}/icon.png"
+rsvg-convert -w 720 -h 360 branding/wallpaper.svg -o "${branding_dir}/welcome.png"
 
 install -Dm644 branding/fastfetch-logo.txt "${profile}/airootfs/usr/share/najs/fastfetch/logo.txt"
 install -Dm644 branding/fastfetch-config.jsonc "${profile}/airootfs/etc/xdg/fastfetch/config.jsonc"
 install -Dm644 branding/najs-fastfetch.sh "${profile}/airootfs/etc/profile.d/najs-fastfetch.sh"
 install -Dm644 branding/najs-prompt.sh "${profile}/airootfs/etc/profile.d/najs-prompt.sh"
 install -Dm644 branding/bashrc "${profile}/airootfs/etc/skel/.bashrc"
+install -Dm644 branding/hyprland/hyprland.conf "${profile}/airootfs/etc/skel/.config/hypr/hyprland.conf"
+install -Dm644 branding/hyprland/waybar.jsonc "${profile}/airootfs/etc/skel/.config/waybar/config.jsonc"
+install -Dm644 branding/hyprland/waybar.css "${profile}/airootfs/etc/skel/.config/waybar/style.css"
 install -Dm644 branding/Najs.colorscheme "${profile}/airootfs/usr/share/konsole/Najs.colorscheme"
 install -Dm644 branding/Najs.profile "${profile}/airootfs/usr/share/konsole/Najs.profile"
 install -Dm644 branding/kdeglobals "${profile}/airootfs/etc/xdg/kdeglobals"
@@ -55,6 +122,7 @@ install -Dm644 branding/najs-about.desktop "${profile}/airootfs/usr/share/applic
 install -Dm644 branding/najs-welcome-gui.desktop "${profile}/airootfs/usr/share/applications/najs-welcome.desktop"
 install -Dm755 branding/najs-welcome "${profile}/airootfs/usr/bin/najs-welcome"
 install -Dm755 branding/najs-welcome-gui "${profile}/airootfs/usr/local/bin/najs-welcome-gui"
+install -Dm755 branding/najs-hyprland-settings "${profile}/airootfs/usr/local/bin/najs-hyprland-settings"
 install -Dm644 branding/getting-started.html "${profile}/airootfs/usr/share/doc/najs/getting-started.html"
 install -Dm644 branding/plasma-layout.js "${profile}/airootfs/usr/share/najs/plasma/layout.js"
 

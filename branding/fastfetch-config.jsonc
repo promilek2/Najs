@@ -3,9 +3,12 @@
   "logo": {
     "type": "file",
     "source": "/usr/share/najs/fastfetch/logo.txt",
+    "position": "left",
     "color": {
-      "1": "38;2;89;210;255",
-      "2": "38;2;139;231;255"
+      "1": "38;2;37;99;235",
+      "2": "38;2;56;189;248",
+      "3": "38;2;125;211;252",
+      "4": "38;2;167;139;250"
     },
     "padding": {
       "top": 1,
@@ -13,26 +16,35 @@
     }
   },
   "display": {
-    "separator": "  >  ",
+    "separator": "  │  ",
     "color": {
-      "keys": "38;2;89;210;255",
-      "title": "38;2;139;231;255"
+      "keys": "38;2;125;211;252",
+      "title": "38;2;167;139;250",
+      "separator": "38;2;37;99;235"
     }
   },
   "modules": [
     "title",
     "separator",
-    { "type": "os", "key": "System" },
+    { "type": "os", "key": "OS" },
     { "type": "command", "key": "Generation", "text": "sed -n 's/^NAJS_GENERATION=//p' /etc/najs-release | tr -d '\"'" },
+    { "type": "host", "key": "Computer" },
     { "type": "kernel", "key": "Kernel" },
+    { "type": "uptime", "key": "Uptime" },
+    { "type": "packages", "key": "Packages" },
+    "break",
     { "type": "de", "key": "Desktop" },
-    { "type": "wm", "key": "Compositor" },
+    { "type": "wm", "key": "WM" },
+    { "type": "display", "key": "Display" },
     { "type": "terminal", "key": "Terminal" },
     { "type": "shell", "key": "Shell" },
-    { "type": "packages", "key": "Packages" },
-    { "type": "uptime", "key": "Uptime" },
+    "break",
+    { "type": "cpu", "key": "Processor" },
+    { "type": "gpu", "key": "Graphics" },
     { "type": "memory", "key": "Memory" },
-    { "type": "disk", "key": "System disk", "folders": "/" },
+    { "type": "disk", "key": "Disk", "folders": "/" },
+    { "type": "localip", "key": "Local IP" },
+    { "type": "locale", "key": "Locale" },
     "break",
     "colors"
   ]

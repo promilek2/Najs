@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+filtered=()
+for argument in "$@"; do
+  case "${argument}" in
+    cachyos-grub-theme|grub-btrfs-support|grub-hook|linux-cachyos*|systemd-boot-manager)
+      continue
+      ;;
+  esac
+  filtered+=("${argument}")
+done
+
+exec /usr/local/lib/najs/pacstrap_calamares "${filtered[@]}"

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if (( EUID != 0 )); then
+  exec sudo -E "$0" "$@"
+fi
+
+if [[ ! -d /sys/firmware/efi ]]; then
+  exec kdialog --error "Najs currently requires a computer booted in UEFI mode."
+fi
+
+export LANG=en_US.UTF-8
+export LANGUAGE=en_US
+export LC_ALL=en_US.UTF-8
+export QT_STYLE_OVERRIDE=Breeze
+
+install -d -m 700 /run/najs-install
+if [[ -r /sys/firmware/qemu_fw_cfg/by_name/opt/najs/calamares-smoke/raw ]]; then
+  exec > >(tee /dev/ttyS0) 2>&1
+  exec calamares -D8 "$@"
+fi
+exec calamares -D6 "$@"

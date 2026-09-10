@@ -24,7 +24,13 @@ file_permissions=(
   ["/usr/local/lib/najs/apply-desktop-branding"]="0:0:755"
   ["/usr/local/lib/najs/report-live-health"]="0:0:755"
   ["/usr/local/lib/najs/run-vm-install"]="0:0:755"
+  ["/usr/local/lib/najs/pacstrap_calamares"]="0:0:755"
   ["/usr/local/bin/najs"]="0:0:755"
+  ["/usr/local/bin/najs-calamares"]="0:0:755"
   ["/usr/local/bin/najs-install"]="0:0:755"
   ["/usr/local/bin/najs-welcome-gui"]="0:0:755"
+  ["/usr/bin/calamares"]="0:0:755"
+  ["/usr/bin/ckbcomp"]="0:0:755"
+  ["/etc/calamares/scripts/pacstrap_calamares"]="0:0:755"
+  ["/etc/skel/Desktop/Install Najs.desktop"]="1000:1000:755"
 )

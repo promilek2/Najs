@@ -1,0 +1,103 @@
+QWidget {
+    color: #dce8ef;
+    background-color: #101d28;
+    font-family: "Noto Sans";
+    font-size: 13px;
+}
+
+#mainApp, QStackedWidget, QScrollArea, QScrollArea > QWidget > QWidget {
+    background-color: #101d28;
+}
+
+QLabel#titleLabel, QLabel#mainTextLabel {
+    color: #f5fbff;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+QPushButton {
+    min-height: 34px;
+    padding: 4px 18px;
+    border: 1px solid #355064;
+    border-radius: 8px;
+    background-color: #1a2b38;
+    color: #e8f4f8;
+}
+
+QPushButton:hover {
+    border-color: #55d6be;
+    background-color: #213746;
+}
+
+QPushButton:pressed, QPushButton:checked {
+    background-color: #55d6be;
+    color: #07151e;
+}
+
+QPushButton:disabled {
+    color: #607584;
+    border-color: #263b49;
+    background-color: #14232e;
+}
+
+QLineEdit, QComboBox, QSpinBox, QDateEdit, QTimeEdit, QListView, QTreeView, QTableView {
+    min-height: 30px;
+    padding: 3px 8px;
+    border: 1px solid #355064;
+    border-radius: 7px;
+    background-color: #0c1822;
+    selection-background-color: #55d6be;
+    selection-color: #07151e;
+}
+
+QLineEdit:focus, QComboBox:focus, QListView:focus, QTreeView:focus {
+    border: 2px solid #55d6be;
+}
+
+QGroupBox {
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid #294252;
+    border-radius: 10px;
+    font-weight: 600;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 6px;
+    color: #78e4d0;
+}
+
+QCheckBox, QRadioButton {
+    spacing: 8px;
+    background-color: transparent;
+}
+
+QCheckBox::indicator, QRadioButton::indicator {
+    width: 18px;
+    height: 18px;
+}
+
+QProgressBar {
+    border: 1px solid #355064;
+    border-radius: 7px;
+    background-color: #0c1822;
+    text-align: center;
+}
+
+QProgressBar::chunk {
+    border-radius: 6px;
+    background-color: #55d6be;
+}
+
+QToolTip {
+    color: #f5fbff;
+    background-color: #182b38;
+    border: 1px solid #55d6be;
+    padding: 6px;
+}
+
+QDialogButtonBox {
+    dialogbuttonbox-buttons-have-icons: 0;
+}

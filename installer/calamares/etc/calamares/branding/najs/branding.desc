@@ -1,0 +1,37 @@
+---
+componentName: najs
+welcomeStyleCalamares: false
+welcomeExpandingLogo: true
+windowExpanding: normal
+windowSize: 1280px,760px
+windowPlacement: center
+sidebar: qml,bottom
+navigation: widget
+
+strings:
+  productName: Najs
+  shortProductName: Najs
+  version: 0.1 Development
+  shortVersion: 0.1
+  versionedName: Najs 0.1 Development
+  shortVersionedName: Najs 0.1
+  bootloaderEntryName: Najs
+  productUrl: ""
+  supportUrl: ""
+  knownIssuesUrl: ""
+  releaseNotesUrl: ""
+  donateUrl: ""
+
+images:
+  productLogo: logo.png
+  productIcon: icon.png
+  productWelcome: welcome.png
+
+style:
+  SidebarBackground: "#0b1722"
+  SidebarText: "#8da6b8"
+  SidebarTextCurrent: "#06131d"
+  SidebarBackgroundCurrent: "#55d6be"
+
+slideshow: show.qml
+slideshowAPI: 2

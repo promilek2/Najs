@@ -20,6 +20,7 @@
     "flatpak",
     "fwupd",
     "git",
+    "gnome-software",
     "gst-plugin-pipewire",
     "gst-plugins-bad",
     "gst-plugins-good",
@@ -64,7 +65,7 @@
   "desktops": {
     "kde": {
       "label": "KDE Plasma",
-      "description": "Kompletny i latwy pulpit. Polecany dla wiekszosci osob.",
+      "description": "A complete and flexible desktop. Recommended for most users.",
       "profile": "KDE Plasma",
       "greeter": "sddm",
       "service": "sddm",
@@ -76,73 +77,103 @@
         "kcalc",
         "konsole",
         "partitionmanager",
+        "plasma-meta",
+        "sddm",
         "xdg-desktop-portal-kde"
       ]
     },
     "gnome": {
       "label": "GNOME",
-      "description": "Prosty pulpit z duzymi, czytelnymi elementami.",
+      "description": "A focused desktop with large, accessible controls.",
       "profile": "GNOME",
       "greeter": "gdm",
       "service": "gdm",
       "environment": "gnome",
       "session": "wayland",
       "packages": [
+        "gdm",
+        "gnome",
         "gnome-disk-utility",
         "xdg-desktop-portal-gnome"
       ]
     },
     "hyprland": {
       "label": "Hyprland",
-      "description": "Lekki kafelkowy pulpit Wayland dla osob lubiacych skroty klawiaturowe.",
+      "description": "A lightweight tiling Wayland desktop for keyboard-driven workflows.",
       "profile": "Hyprland",
       "greeter": "sddm",
       "service": "sddm",
       "environment": "hyprland",
       "session": "wayland",
       "packages": [
+        "brightnessctl",
+        "grim",
+        "hyprland",
+        "kitty",
+        "mako",
         "network-manager-applet",
         "nwg-look",
+        "nwg-displays",
+        "polkit-gnome",
         "pavucontrol",
+        "sddm",
+        "slurp",
         "swaybg",
         "swaylock",
+        "thunar",
         "waybar",
         "wl-clipboard",
         "xdg-desktop-portal-gtk",
-        "xdg-user-dirs"
+        "xdg-desktop-portal-hyprland",
+        "xdg-user-dirs",
+        "wofi"
       ]
     },
     "xfce": {
       "label": "Xfce",
-      "description": "Lekki klasyczny pulpit dla slabszych komputerow.",
+      "description": "A lightweight classic desktop for older computers.",
       "profile": "Xfce4",
       "greeter": "lightdm-gtk-greeter",
       "service": "lightdm",
       "environment": "xfce",
       "session": "xorg",
       "packages": [
+        "gvfs",
+        "lightdm",
+        "lightdm-gtk-greeter",
         "network-manager-applet",
-        "xdg-desktop-portal-gtk"
+        "pavucontrol",
+        "xdg-desktop-portal-gtk",
+        "xdg-desktop-portal-xapp",
+        "xfce4",
+        "xfce4-goodies",
+        "xorg-server"
       ]
     },
     "cinnamon": {
       "label": "Cinnamon",
-      "description": "Tradycyjny uklad pulpitu podobny do klasycznych systemow PC.",
+      "description": "A familiar traditional desktop layout.",
       "profile": "Cinnamon",
       "greeter": "lightdm-gtk-greeter",
       "service": "lightdm",
       "environment": "cinnamon",
       "session": "xorg",
       "packages": [
+        "cinnamon",
+        "gnome-terminal",
+        "lightdm",
+        "lightdm-gtk-greeter",
         "network-manager-applet",
-        "xdg-desktop-portal-gtk"
+        "xdg-desktop-portal-gtk",
+        "xdg-desktop-portal-xapp",
+        "xorg-server"
       ]
     }
   },
   "gpus": {
     "auto": {
-      "label": "Automatycznie / otwarte sterowniki",
-      "description": "Najbezpieczniejszy wybor dla nieznanego sprzetu.",
+      "label": "Automatic / open-source drivers",
+      "description": "The safest option when the graphics hardware is unknown.",
       "driver": "All open-source",
       "gaming_packages": [
         "lib32-mesa",
@@ -153,7 +184,7 @@
     },
     "amd": {
       "label": "AMD / ATI",
-      "description": "Otwarte sterowniki Mesa i RADV.",
+      "description": "Open-source Mesa and RADV drivers.",
       "driver": "AMD / ATI (open-source)",
       "gaming_packages": [
         "lib32-mesa",
@@ -162,7 +193,7 @@
     },
     "intel": {
       "label": "Intel",
-      "description": "Otwarte sterowniki Intel Mesa.",
+      "description": "Open-source Intel Mesa drivers.",
       "driver": "Intel (open-source)",
       "gaming_packages": [
         "lib32-mesa",
@@ -170,16 +201,16 @@
       ]
     },
     "nvidia": {
-      "label": "NVIDIA Turing lub nowsza",
-      "description": "Otwarty modul jadra NVIDIA z oficjalnymi bibliotekami uzytkownika.",
+      "label": "NVIDIA Turing or newer",
+      "description": "NVIDIA open kernel module with official user-space libraries.",
       "driver": "Nvidia (open kernel module for newer GPUs, Turing+)",
       "gaming_packages": [
         "lib32-nvidia-utils"
       ]
     },
     "vm": {
-      "label": "Maszyna wirtualna",
-      "description": "Sterownik odpowiedni do testow w VirtualBox lub QEMU.",
+      "label": "Virtual machine",
+      "description": "Guest drivers for VirtualBox and QEMU test systems.",
       "driver": "VirtualBox (open-source)",
       "gaming_packages": [
         "lib32-mesa"
@@ -188,8 +219,8 @@
   },
   "bundles": {
     "office": {
-      "label": "Biuro i dokumenty",
-      "description": "LibreOffice, PDF oraz slowniki polski i angielski.",
+      "label": "Office and documents",
+      "description": "LibreOffice, PDF tools, and English and Polish dictionaries.",
       "packages": [
         "hunspell-en_us",
         "hunspell-pl",
@@ -200,7 +231,7 @@
     },
     "media": {
       "label": "Multimedia",
-      "description": "Odtwarzanie muzyki, filmow i prosta obsluga obrazow.",
+      "description": "Music, video, and image playback.",
       "packages": [
         "gwenview",
         "vlc"
@@ -208,8 +239,8 @@
       "services": []
     },
     "gaming": {
-      "label": "Granie",
-      "description": "Steam, Lutris, Wine, GameMode, Gamescope, MangoHud, Discord i OBS.",
+      "label": "Gaming",
+      "description": "Steam, Lutris, Wine, GameMode, Gamescope, MangoHud, Discord, and OBS.",
       "packages": [
         "discord",
         "gamemode",
@@ -234,8 +265,8 @@
       ]
     },
     "creator": {
-      "label": "Tworzenie",
-      "description": "Blender, Krita, GIMP, Inkscape, Kdenlive, Audacity i OBS.",
+      "label": "Creative studio",
+      "description": "Blender, Krita, GIMP, Inkscape, Kdenlive, Audacity, and OBS.",
       "packages": [
         "audacity",
         "blender",
@@ -248,8 +279,8 @@
       "services": []
     },
     "development": {
-      "label": "Programowanie",
-      "description": "Code, GitHub CLI, Rust, Python, Node.js, Podman i Distrobox.",
+      "label": "Development",
+      "description": "Code, GitHub CLI, Rust, Python, Node.js, Podman, and Distrobox.",
       "packages": [
         "base-devel",
         "code",
@@ -264,8 +295,8 @@
       "services": []
     },
     "communication": {
-      "label": "Komunikacja",
-      "description": "Discord, Signal, Telegram i Thunderbird.",
+      "label": "Communication",
+      "description": "Discord, Signal, Telegram, and Thunderbird.",
       "packages": [
         "discord",
         "signal-desktop",
@@ -275,8 +306,8 @@
       "services": []
     },
     "virtualization": {
-      "label": "Maszyny wirtualne",
-      "description": "QEMU/KVM, libvirt i graficzny Virtual Machine Manager.",
+      "label": "Virtualization",
+      "description": "QEMU/KVM, libvirt, and Virtual Machine Manager.",
       "packages": [
         "dnsmasq",
         "edk2-ovmf",
@@ -291,21 +322,21 @@
   },
   "use_cases": {
     "minimal": {
-      "label": "Minimalny",
-      "description": "Tylko pulpit, przegladarka i podstawy systemu.",
+      "label": "Minimal",
+      "description": "Desktop, browser, and essential system tools only.",
       "bundles": []
     },
     "standard": {
-      "label": "Codzienny",
-      "description": "Biuro, dokumenty i multimedia.",
+      "label": "Everyday",
+      "description": "Office, documents, and multimedia.",
       "bundles": [
         "office",
         "media"
       ]
     },
     "gaming": {
-      "label": "Gracz",
-      "description": "Kompletny zestaw do gier i komunikacji.",
+      "label": "Gamer",
+      "description": "A complete gaming and communication setup.",
       "bundles": [
         "office",
         "media",
@@ -314,8 +345,8 @@
       ]
     },
     "creator": {
-      "label": "Tworca",
-      "description": "Biuro, multimedia i aplikacje kreatywne.",
+      "label": "Creator",
+      "description": "Office, multimedia, and creative applications.",
       "bundles": [
         "office",
         "media",
@@ -323,8 +354,8 @@
       ]
     },
     "development": {
-      "label": "Programista",
-      "description": "Programowanie oraz lokalne maszyny wirtualne.",
+      "label": "Developer",
+      "description": "Development tools and local virtual machines.",
       "bundles": [
         "office",
         "media",
@@ -333,8 +364,8 @@
       ]
     },
     "everything": {
-      "label": "Wszystko",
-      "description": "Wszystkie dostepne grupy aplikacji.",
+      "label": "Everything",
+      "description": "Every available software collection.",
       "bundles": [
         "office",
         "media",

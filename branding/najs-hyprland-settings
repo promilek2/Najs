@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+choice="$(zenity \
+  --list \
+  --title="Najs Settings" \
+  --text="Choose a settings panel:" \
+  --width=520 \
+  --height=360 \
+  --column="Panel" \
+  --column="What it configures" \
+  "Displays" "Resolution, scale, orientation, and layout" \
+  "Network" "Wi-Fi, Ethernet, VPN, and connection profiles" \
+  "Sound" "Outputs, inputs, streams, and volume" \
+  "Appearance" "GTK theme, icons, fonts, and cursor" \
+  2>/dev/null)" || exit 0
+
+case "${choice}" in
+  "Displays") exec nwg-displays ;;
+  "Network") exec nm-connection-editor ;;
+  "Sound") exec pavucontrol ;;
+  "Appearance") exec nwg-look ;;
+esac

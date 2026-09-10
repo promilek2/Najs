@@ -31,7 +31,15 @@ the file. `najs diff` compares its managed subset with the running system and is
 read-only. `najs apply` is intentionally unavailable until isolated generation
 composition exists.
 
+Validation rejects duplicate entries, package install/remove conflicts, service
+enable/disable conflicts, unknown profiles, malformed hostnames or locales, and
+feature settings that contradict explicit service operations. This prevents a
+manifest from describing two incompatible outcomes for the same resource.
+
 Supported desktop environments are `plasma`, `gnome`, `hyprland`, `xfce`, and
 `cinnamon`. Supported session types are `wayland` and `xorg`. The installer
 records all selected application-group profiles and resolved packages in this
 manifest.
+
+Supported profiles are `desktop`, `office`, `media`, `gaming`, `creator`,
+`development`, `communication`, and `virtualization`.

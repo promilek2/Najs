@@ -8,8 +8,11 @@ import copy
 import json
 import os
 import re
+import select
 import shutil
 import subprocess
+import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -18,8 +21,102 @@ LIVE_CONFIG = Path("/usr/share/najs/installer/archinstall.json")
 LIVE_BASE_CONFIG = Path("/usr/share/najs/installer/base.json")
 LIVE_CATALOG = Path("/usr/share/najs/installer/catalog.json")
 GENERATED_CONFIG = Path("/run/najs-install/selected-config.json")
-TARGET = Path("/mnt/archinstall")
+GENERATED_CREDENTIALS = Path("/run/najs-install/credentials.json")
+INSTALL_LOG = Path("/var/log/najs-install.log")
+TARGET = Path("/mnt")
 PACKAGE_NAME = re.compile(r"^[a-zA-Z0-9@._+:-]+$")
+USERNAME = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+HOSTNAME = re.compile(r"^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$")
+MINIMUM_DISK_SIZE = 32 * 1024**3
+MIB = 1024**2
+GIB = 1024**3
+
+LANGUAGES = {
+    "pl": {
+        "label": "Polish",
+        "description": "Polish system language and keyboard",
+        "locale": "pl_PL",
+        "keyboard": "pl",
+        "timezone": "Europe/Warsaw",
+    },
+    "en": {
+        "label": "English",
+        "description": "English system language and US keyboard",
+        "locale": "en_US",
+        "keyboard": "us",
+        "timezone": "UTC",
+    },
+    "de": {
+        "label": "German",
+        "description": "German system language and keyboard",
+        "locale": "de_DE",
+        "keyboard": "de",
+        "timezone": "Europe/Berlin",
+    },
+    "fr": {
+        "label": "French",
+        "description": "French system language and keyboard",
+        "locale": "fr_FR",
+        "keyboard": "fr",
+        "timezone": "Europe/Paris",
+    },
+    "es": {
+        "label": "Spanish",
+        "description": "Spanish system language and keyboard",
+        "locale": "es_ES",
+        "keyboard": "es",
+        "timezone": "Europe/Madrid",
+    },
+}
+KERNELS = {
+    "linux": {
+        "label": "Linux Stable",
+        "description": "Latest stable kernel, recommended for most users",
+    },
+    "linux-lts": {
+        "label": "Linux LTS",
+        "description": "Long-term support kernel for predictable operation",
+    },
+    "linux-zen": {
+        "label": "Linux Zen",
+        "description": "Tuned for desktop responsiveness, multimedia, and gaming",
+    },
+    "linux-hardened": {
+        "label": "Linux Hardened",
+        "description": "Security-oriented defaults and additional hardening",
+    },
+}
+FILESYSTEMS = {
+    "btrfs": {
+        "label": "Btrfs",
+        "description": "Compression and subvolumes, recommended for Najs",
+    },
+    "ext4": {
+        "label": "ext4",
+        "description": "A simple and proven filesystem",
+    },
+    "xfs": {
+        "label": "XFS",
+        "description": "A high-performance filesystem for large data sets",
+    },
+}
+BOOTLOADERS = {
+    "Systemd-boot": {
+        "label": "systemd-boot",
+        "description": "A simple UEFI boot manager, recommended for Najs",
+    },
+    "Grub": {
+        "label": "GRUB",
+        "description": "A mature boot manager with broad compatibility",
+    },
+}
+DESKTOP_REQUIREMENTS = {
+    "plasma": ("sddm.service", (Path("usr/share/wayland-sessions/plasma.desktop"),)),
+    "gnome": ("gdm.service", (Path("usr/share/wayland-sessions/gnome.desktop"),)),
+    "hyprland": ("sddm.service", (Path("usr/share/wayland-sessions/hyprland.desktop"),)),
+    "xfce": ("lightdm.service", (Path("usr/share/xsessions/xfce.desktop"),)),
+    "cinnamon": ("lightdm.service", (Path("usr/share/xsessions/cinnamon.desktop"),)),
+}
 PLATFORM_PATHS = (
     Path("etc/systemd/journald.conf.d/10-najs-limits.conf"),
     Path("etc/systemd/system/najs-flatpak-setup.service"),
@@ -28,6 +125,8 @@ PLATFORM_PATHS = (
     Path("etc/profile.d/najs-fastfetch.sh"),
     Path("etc/profile.d/najs-prompt.sh"),
     Path("etc/skel/.bashrc"),
+    Path("etc/skel/.config/hypr"),
+    Path("etc/skel/.config/waybar"),
     Path("etc/sddm.conf.d/10-najs-theme.conf"),
     Path("etc/xdg/autostart/najs-first-login.desktop"),
     Path("etc/xdg/autostart/najs-welcome.desktop"),
@@ -35,6 +134,7 @@ PLATFORM_PATHS = (
     Path("etc/xdg/kdeglobals"),
     Path("etc/xdg/konsolerc"),
     Path("usr/bin/najs-welcome"),
+    Path("usr/local/bin/najs-hyprland-settings"),
     Path("usr/local/bin/najs-welcome-gui"),
     Path("usr/local/lib/najs/apply-desktop-branding"),
     Path("usr/share/applications/najs-about.desktop"),
@@ -92,6 +192,12 @@ def prepare_config(
     gpu_name: str,
     hostname: str,
     extra_packages: list[str],
+    kernel: str = "linux",
+    locale: str = "en_US",
+    keyboard: str = "us",
+    timezone: str = "UTC",
+    bootloader: str = "Systemd-boot",
+    swap: bool = True,
 ) -> dict[str, Any]:
     desktops = catalog["desktops"]
     use_cases = catalog["use_cases"]
@@ -133,6 +239,20 @@ def prepare_config(
 
     config = copy.deepcopy(base_config)
     config["hostname"] = hostname
+    config["kernels"] = [kernel]
+    config["locale_config"] = {
+        "kb_layout": keyboard,
+        "sys_enc": "UTF-8",
+        "sys_lang": locale,
+    }
+    config["timezone"] = timezone
+    config["bootloader_config"] = {
+        "bootloader": bootloader,
+        "uki": bootloader == "Systemd-boot",
+        "removable": bootloader == "Grub",
+    }
+    config["swap"] = {"enabled": swap, "algorithm": "zstd"}
+    config["silent"] = True
     config["packages"] = sorted(set(packages))
     config["services"] = unique(services)
     config["profile_config"] = {
@@ -158,8 +278,101 @@ def prepare_config(
         "bundles": selected_bundles,
         "gpu": gpu_name,
         "extra_packages": extra_packages,
+        "kernel": kernel,
+        "filesystem": None,
+        "encrypted": False,
     }
     return config
+
+
+def size_json(value: int, unit: str, sector_size: int) -> dict[str, Any]:
+    return {
+        "value": value,
+        "unit": unit,
+        "sector_size": {"value": sector_size, "unit": "B"},
+    }
+
+
+def make_disk_config(
+    disk: str,
+    disk_size: int,
+    sector_size: int,
+    filesystem: str,
+    encrypted: bool,
+) -> dict[str, Any]:
+    if not disk.startswith("/dev/"):
+        raise ValueError("disk must be a device below /dev")
+    if disk_size < MINIMUM_DISK_SIZE:
+        raise ValueError("selected disk is smaller than 32 GiB")
+    if sector_size not in (512, 4096):
+        raise ValueError(f"unsupported logical sector size: {sector_size}")
+    if filesystem not in FILESYSTEMS:
+        raise ValueError(f"unsupported filesystem: {filesystem}")
+
+    boot_id = str(uuid.uuid4())
+    root_id = str(uuid.uuid4())
+    root_start = MIB + GIB
+    usable_end = (disk_size - MIB) // MIB * MIB
+    root_size = usable_end - root_start
+    if root_size <= 0:
+        raise ValueError("selected disk has no usable space")
+
+    btrfs = []
+    mountpoint: str | None = "/"
+    mount_options: list[str] = []
+    if filesystem == "btrfs":
+        mountpoint = None
+        mount_options = ["compress=zstd"]
+        btrfs = [
+            {"name": "roots/initial", "mountpoint": "/"},
+            {"name": "home", "mountpoint": "/home"},
+            {"name": "var-log", "mountpoint": "/var/log"},
+            {"name": "var-cache", "mountpoint": "/var/cache"},
+            {"name": "var-tmp", "mountpoint": "/var/tmp"},
+            {"name": "snapshots", "mountpoint": "/snapshots"},
+        ]
+
+    partitions = [
+        {
+            "obj_id": boot_id,
+            "status": "create",
+            "type": "primary",
+            "start": size_json(MIB, "B", sector_size),
+            "size": size_json(GIB, "B", sector_size),
+            "fs_type": "fat32",
+            "mountpoint": "/boot",
+            "mount_options": [],
+            "flags": ["boot", "esp"],
+            "btrfs": [],
+            "dev_path": None,
+        },
+        {
+            "obj_id": root_id,
+            "status": "create",
+            "type": "primary",
+            "start": size_json(root_start, "B", sector_size),
+            "size": size_json(root_size, "B", sector_size),
+            "fs_type": filesystem,
+            "mountpoint": mountpoint,
+            "mount_options": mount_options,
+            "flags": [],
+            "btrfs": btrfs,
+            "dev_path": None,
+        },
+    ]
+    disk_config: dict[str, Any] = {
+        "config_type": "default_layout",
+        "device_modifications": [
+            {"device": disk, "wipe": True, "partitions": partitions},
+        ],
+    }
+    if encrypted:
+        disk_config["disk_encryption"] = {
+            "encryption_type": "luks",
+            "partitions": [root_id],
+            "lvm_volumes": [],
+        }
+    return disk_config
 
 
 def write_config(path: Path, config: dict[str, Any]) -> None:
@@ -167,17 +380,158 @@ def write_config(path: Path, config: dict[str, Any]) -> None:
     path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
 
-def run_dialog(arguments: list[str]) -> str:
+def write_credentials(path: Path, credentials: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            json.dump(credentials, output, indent=2)
+            output.write("\n")
+    finally:
+        path.chmod(0o600)
+
+
+def run_dialog(arguments: list[str], *, preserve_whitespace: bool = False) -> str:
     result = subprocess.run(
         ["dialog", "--stdout", "--no-collapse", *arguments],
         text=True,
-        capture_output=True,
+        stdout=subprocess.PIPE,
         check=False,
     )
-    if result.returncode == 1:
+    if result.returncode in (1, 255):
         raise InstallerCancelled
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "dialog failed")
+        raise RuntimeError("dialog failed")
+    if preserve_whitespace:
+        return result.stdout.removesuffix("\n")
+    return result.stdout.strip()
+
+
+def show_error(message: str) -> None:
+    run_dialog(["--title", "Check your input", "--msgbox", message, "9", "72"])
+
+
+def prompt_validated(
+    title: str,
+    prompt: str,
+    initial: str,
+    pattern: re.Pattern[str],
+    error: str,
+) -> str:
+    value = initial
+    while True:
+        value = run_dialog(
+            ["--title", title, "--inputbox", prompt, "11", "76", value]
+        )
+        if pattern.fullmatch(value):
+            return value
+        show_error(error)
+
+
+def prompt_password(title: str, prompt: str) -> str:
+    while True:
+        password = run_dialog(
+            ["--title", title, "--insecure", "--passwordbox", prompt, "11", "76"],
+            preserve_whitespace=True,
+        )
+        if len(password) < 4:
+            show_error("The password must contain at least 4 characters.")
+            continue
+        return password
+
+
+def ask_yes_no(title: str, prompt: str, *, default_yes: bool = True) -> bool:
+    arguments = ["--title", title]
+    if not default_yes:
+        arguments.append("--defaultno")
+    result = subprocess.run(
+        ["dialog", "--stdout", "--no-collapse", *arguments, "--yesno", prompt, "12", "78"],
+        check=False,
+    )
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    if result.returncode == 255:
+        raise InstallerCancelled
+    raise RuntimeError("dialog failed")
+
+
+def format_size(size: int) -> str:
+    return f"{size / GIB:.1f} GiB"
+
+
+def lsblk_flag(value: Any) -> bool:
+    return value is True or str(value).lower() in {"1", "true", "yes"}
+
+
+def mounted_paths(device: dict[str, Any]) -> list[str]:
+    paths = [mountpoint for mountpoint in (device.get("mountpoints") or []) if mountpoint]
+    for child in device.get("children", []):
+        paths.extend(mounted_paths(child))
+    return paths
+
+
+def list_install_disks() -> dict[str, dict[str, Any]]:
+    result = subprocess.run(
+        [
+            "lsblk",
+            "--json",
+            "--bytes",
+            "--output",
+            "PATH,SIZE,MODEL,SERIAL,WWN,TYPE,RO,RM,LOG-SEC,MAJ:MIN,MOUNTPOINTS",
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    disks: dict[str, dict[str, Any]] = {}
+    for device in json.loads(result.stdout).get("blockdevices", []):
+        if device.get("type") != "disk" or lsblk_flag(device.get("ro")):
+            continue
+        if mounted_paths(device):
+            continue
+        size = int(device.get("size") or 0)
+        if size < MINIMUM_DISK_SIZE:
+            continue
+        path = str(device["path"])
+        model = str(device.get("model") or "unknown model").strip()
+        removable = "removable media" if lsblk_flag(device.get("rm")) else "internal disk"
+        identity = str(
+            device.get("wwn")
+            or device.get("serial")
+            or f"{model}:{size}:{device.get('maj:min', 'unknown')}"
+        )
+        disks[path] = {
+            "label": f"{format_size(size)}, {model}",
+            "description": removable,
+            "size": size,
+            "sector_size": int(device.get("log-sec") or 512),
+            "model": model,
+            "identity": identity,
+        }
+    return disks
+
+
+def verify_selected_disk(path: str, expected_size: int, expected_identity: str) -> dict[str, Any]:
+    disks = list_install_disks()
+    if path not in disks:
+        raise RuntimeError(f"the selected disk {path} is no longer available")
+    if disks[path]["size"] != expected_size:
+        raise RuntimeError(f"the size of {path} changed after it was selected")
+    if disks[path]["identity"] != expected_identity:
+        raise RuntimeError(f"the identity of {path} changed after it was selected")
+    return disks[path]
+
+
+def hash_password(password: str) -> str:
+    result = subprocess.run(
+        ["openssl", "passwd", "-6", "-stdin"],
+        input=password,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
     return result.stdout.strip()
 
 
@@ -226,10 +580,10 @@ def choose_bundles(catalog: dict[str, Any], use_case: str) -> list[str]:
     output = run_dialog(
         [
             "--title",
-            "Grupy aplikacji",
+            "Software collections",
             "--separate-output",
             "--checklist",
-            "Zaznacz spacja to, co ma zostac zainstalowane. Enter przechodzi dalej.",
+            "Press Space to select software and Enter to continue.",
             "24",
             "100",
             str(len(catalog["bundles"])),
@@ -243,104 +597,213 @@ def wizard(catalog: dict[str, Any]) -> dict[str, Any]:
     run_dialog(
         [
             "--title",
-            "Instalator Najs",
+            "Cocky Installer",
             "--msgbox",
-            "Ten prosty kreator wybierze pulpit, sterownik i aplikacje.\n\n"
-            "W nastepnym kroku Archinstall poprosi o dysk, konto, jezyk i opcjonalne szyfrowanie. "
-            "Dysk nie zostanie zmieniony bez koncowego potwierdzenia.",
-            "13",
+            "This wizard handles the complete Najs installation. You will choose the language, disk, "
+            "account, desktop, and software.\n\n"
+            "No disk is changed before a final summary and a separate data-erasure confirmation.",
+            "14",
             "76",
         ]
     )
+    language = choose_one(
+        "System language",
+        "Choose the system language, keyboard layout, and default time zone:",
+        LANGUAGES,
+        "pl",
+    )
+    language_config = LANGUAGES[language]
+    timezone = language_config["timezone"]
+    while True:
+        timezone = run_dialog(
+            [
+                "--title",
+                "Time zone",
+                "--inputbox",
+                "Enter a time zone such as Europe/London or UTC:",
+                "10",
+                "76",
+                timezone,
+            ]
+        )
+        if (Path("/usr/share/zoneinfo") / timezone).is_file():
+            break
+        show_error(f"Unknown time zone: {timezone}")
+
+    disks = list_install_disks()
+    if not disks:
+        raise RuntimeError("no writable disk of at least 32 GiB was found")
+    disk = choose_one(
+        "Installation disk",
+        "Choose a disk dedicated ENTIRELY to Najs. All data on it will be erased:",
+        disks,
+        next(iter(disks)),
+    )
+    disk_info = disks[disk]
+    filesystem = choose_one(
+        "Filesystem",
+        "Choose the filesystem for the system disk:",
+        FILESYSTEMS,
+        "btrfs",
+    )
+    encrypted = ask_yes_no(
+        "Disk encryption",
+        "Encrypt the system partition with LUKS?\n\n"
+        "Recommended for laptops and computers containing private data.\n\n"
+        "The account password entered on the next screen will also unlock the disk.",
+    )
+
+    username = prompt_validated(
+        "User account",
+        "Enter a username using lowercase letters, numbers, _ or -:",
+        "user",
+        USERNAME,
+        "The username must start with a lowercase letter or _, may contain numbers, _ and -, and must be at most 32 characters.",
+    )
+    user_password = prompt_password(
+        "Installation password",
+        f"Enter one password for {username}. Minimum: 4 characters.\n\n"
+        + (
+            "It will be used for login, administrator access, and disk unlock."
+            if encrypted
+            else "It will be used for login and administrator access."
+        ),
+    )
+    hostname = prompt_validated(
+        "Computer name",
+        "Enter a short name for this computer:",
+        "najs",
+        HOSTNAME,
+        "The computer name may contain letters, numbers, and hyphens, but cannot start or end with a hyphen.",
+    )
+
     desktop = choose_one(
-        "Wybierz pulpit",
-        "Jaki pulpit chcesz uruchamiac po zalogowaniu?",
+        "Choose a desktop",
+        "Which desktop should start after you sign in?",
         catalog["desktops"],
         "kde",
     )
     use_case = choose_one(
-        "Do czego sluzy komputer?",
-        "Wybierz gotowy punkt startowy. Za chwile mozna zmienic kazda grupe aplikacji.",
+        "How will this computer be used?",
+        "Choose a starting point. Every software collection can be adjusted next.",
         catalog["use_cases"],
         "standard",
     )
     selected_bundles = choose_bundles(catalog, use_case)
     gpu = choose_one(
-        "Karta graficzna",
-        "Wybierz karte graficzna. Gdy nie wiesz, zostaw wybor automatyczny.",
+        "Graphics hardware",
+        "Choose the graphics hardware. Keep Automatic when unsure.",
         catalog["gpus"],
         "auto",
     )
-    hostname = run_dialog(
-        [
-            "--title",
-            "Nazwa komputera",
-            "--inputbox",
-            "Podaj krotka nazwe tego komputera:",
-            "10",
-            "70",
-            "najs",
-        ]
+    kernel = choose_one(
+        "System kernel",
+        "Choose a Linux kernel:",
+        KERNELS,
+        "linux",
     )
-    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9-]{0,62}", hostname):
-        raise ValueError("computer name may contain only letters, numbers, and hyphens")
+    bootloader = choose_one(
+        "System boot",
+        "Choose a UEFI boot manager:",
+        BOOTLOADERS,
+        "Systemd-boot",
+    )
+    swap = ask_yes_no(
+        "Swap memory",
+        "Enable compressed zram swap?\n\n"
+        "Recommended for computers with any amount of memory.",
+    )
 
-    additional = run_dialog(
-        [
-            "--title",
-            "Dodatkowe pakiety",
-            "--inputbox",
-            "Opcjonalnie wpisz nazwy dodatkowych pakietow Arch oddzielone spacjami. "
-            "Pozostaw puste, jesli niczego nie potrzebujesz:",
-            "11",
-            "86",
+    while True:
+        additional = run_dialog(
+            [
+                "--title",
+                "Additional packages",
+                "--inputbox",
+                "Optionally enter additional official Arch package names separated by spaces. "
+                "Leave this empty if no additional packages are needed:",
+                "11",
+                "86",
+            ]
+        )
+        try:
+            extra_packages = parse_package_list(additional)
+        except ValueError as error:
+            show_error(str(error))
+            continue
+        missing = [
+            package
+            for package in extra_packages
+            if subprocess.run(
+                ["pacman", "-Si", package],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            ).returncode
+            != 0
         ]
-    )
-    extra_packages = parse_package_list(additional)
-    missing = [
-        package
-        for package in extra_packages
-        if subprocess.run(
-            ["pacman", "-Si", package],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        ).returncode
-        != 0
-    ]
-    if missing:
-        raise ValueError(f"packages not found in enabled repositories: {', '.join(missing)}")
+        if missing:
+            show_error(f"Packages not found: {', '.join(missing)}")
+            continue
+        break
 
     bundle_labels = [catalog["bundles"][name]["label"] for name in selected_bundles]
     summary = (
-        f"Pulpit: {catalog['desktops'][desktop]['label']}\n"
-        f"Zastosowanie: {catalog['use_cases'][use_case]['label']}\n"
-        f"Grafika: {catalog['gpus'][gpu]['label']}\n"
-        f"Nazwa komputera: {hostname}\n"
-        f"Grupy aplikacji: {', '.join(bundle_labels) if bundle_labels else 'brak'}\n"
-        f"Dodatkowe pakiety: {', '.join(extra_packages) if extra_packages else 'brak'}\n\n"
-        "Czy przejsc do wyboru dysku i konta uzytkownika?"
+        f"Language: {language_config['label']} ({language_config['locale']})\n"
+        f"Time zone: {timezone}\n"
+        f"Disk: {disk} - {format_size(disk_info['size'])}, {disk_info['model']}\n"
+        f"Filesystem: {FILESYSTEMS[filesystem]['label']}\n"
+        f"LUKS encryption: {'yes' if encrypted else 'no'}\n"
+        f"Password use: {'account and disk unlock' if encrypted else 'account only'}\n"
+        f"User: {username}\n"
+        f"Computer name: {hostname}\n"
+        f"Desktop: {catalog['desktops'][desktop]['label']}\n"
+        f"Use case: {catalog['use_cases'][use_case]['label']}\n"
+        f"Graphics: {catalog['gpus'][gpu]['label']}\n"
+        f"Kernel: {KERNELS[kernel]['label']}\n"
+        f"Boot manager: {BOOTLOADERS[bootloader]['label']}\n"
+        f"Zram: {'yes' if swap else 'no'}\n"
+        f"Software: {', '.join(bundle_labels) if bundle_labels else 'none'}\n"
+        f"Additional packages: {', '.join(extra_packages) if extra_packages else 'none'}\n\n"
+        f"WARNING: all data on {disk} will be erased."
     )
     run_dialog(
         [
             "--title",
-            "Podsumowanie wyboru",
+            "Installation summary",
             "--yes-label",
-            "Dalej",
+            "Erase and install",
             "--no-label",
-            "Anuluj",
+            "Cancel",
             "--yesno",
             summary,
-            "18",
-            "88",
+            "25",
+            "96",
         ]
     )
+
     return {
+        "language": language,
+        "locale": language_config["locale"],
+        "keyboard": language_config["keyboard"],
+        "timezone": timezone,
+        "disk": disk,
+        "disk_size": disk_info["size"],
+        "sector_size": disk_info["sector_size"],
+        "disk_identity": disk_info["identity"],
+        "filesystem": filesystem,
+        "encrypted": encrypted,
+        "encryption_password": user_password if encrypted else None,
+        "username": username,
+        "user_password": user_password,
         "desktop": desktop,
         "use_case": use_case,
         "bundles": selected_bundles,
         "gpu": gpu,
         "hostname": hostname,
+        "kernel": kernel,
+        "bootloader": bootloader,
+        "swap": swap,
         "extra_packages": extra_packages,
     }
 
@@ -348,19 +811,174 @@ def wizard(catalog: dict[str, Any]) -> dict[str, Any]:
 def verify_environment(base_config_path: Path, catalog_path: Path) -> None:
     if not Path("/sys/firmware/efi").is_dir():
         raise SystemExit("Najs installation currently requires UEFI boot")
-    for command in ("archinstall", "dialog", "pacman"):
+    for command in ("archinstall", "dialog", "lsblk", "openssl", "pacman"):
         if not shutil.which(command):
             raise SystemExit(f"{command} is not available in this live environment")
     base_config = load_json(base_config_path)
     catalog = load_json(catalog_path)
     if catalog.get("version") != 1:
         raise SystemExit("unsupported installer catalog version")
-    prepare_config(base_config, catalog, "kde", "standard", None, "auto", "najs", [])
+    for desktop in catalog["desktops"]:
+        prepare_config(base_config, catalog, desktop, "standard", None, "auto", "najs", [])
 
 
 def initialize_keyring() -> None:
     subprocess.run(["pacman-key", "--init"], check=True)
     subprocess.run(["pacman-key", "--populate", "archlinux"], check=True)
+
+
+def run_backend(config_path: Path, credentials_path: Path, target: Path) -> None:
+    if os.environ.get("NAJS_INSTALL_BACKEND") != "1":
+        raise SystemExit("backend mode is internal to the Najs installer")
+    if os.geteuid() != 0:
+        raise SystemExit("backend mode requires root")
+    if credentials_path.stat().st_mode & 0o077:
+        raise SystemExit("credentials file permissions are too broad")
+
+    print("[1/3] Preparing package keys...", flush=True)
+    initialize_keyring()
+    print("[2/3] Installing Najs...", flush=True)
+    result = subprocess.run(
+        [
+            "archinstall",
+            "--config",
+            str(config_path),
+            "--creds",
+            str(credentials_path),
+            "--silent",
+        ],
+        check=False,
+    )
+    if result.returncode != 0:
+        raise SystemExit(f"installation backend exited with status {result.returncode}")
+    print("[3/3] Applying the Najs platform layer...", flush=True)
+    provision_target(target, config_path)
+    print("Installation completed.", flush=True)
+
+
+def install_with_progress(config_path: Path, credentials_path: Path, target: Path) -> None:
+    INSTALL_LOG.parent.mkdir(parents=True, exist_ok=True)
+    environment = os.environ.copy()
+    environment["NAJS_INSTALL_BACKEND"] = "1"
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--backend",
+        "--config",
+        str(config_path),
+        "--credentials",
+        str(credentials_path),
+        "--target",
+        str(target),
+    ]
+    progress = subprocess.Popen(
+        [
+            "dialog",
+            "--no-collapse",
+            "--title",
+            "Installing Najs",
+            "--gauge",
+            f"Starting installation...\n\nDetailed log: {INSTALL_LOG}\nDo not turn off the computer.",
+            "14",
+            "78",
+            "0",
+        ],
+        stdin=subprocess.PIPE,
+        text=True,
+    )
+
+    percent = 0
+    message = "Starting installation..."
+
+    def update_progress(new_percent: int, new_message: str) -> None:
+        nonlocal percent, message
+        percent = new_percent
+        message = new_message
+        if progress.stdin is None:
+            return
+        try:
+            progress.stdin.write(
+                f"XXX\n{percent}\n{message}\n\nDetailed log: {INSTALL_LOG}\n"
+                "Do not turn off the computer.\nXXX\n"
+            )
+            progress.stdin.flush()
+        except BrokenPipeError:
+            pass
+
+    result_code = 1
+    update_progress(1, "Validating the installation environment...")
+    try:
+        with INSTALL_LOG.open("wb") as log:
+            backend = subprocess.Popen(
+                command,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                bufsize=0,
+            )
+            if backend.stdout is None:
+                raise RuntimeError("installation backend output is unavailable")
+
+            recent_output = b""
+
+            def record_output(chunk: bytes) -> None:
+                nonlocal recent_output
+                log.write(chunk)
+                log.flush()
+                recent_output = (recent_output + chunk)[-512:]
+                if b"Installation completed." in recent_output:
+                    update_progress(100, "Installation completed successfully.")
+                elif b"[3/3]" in recent_output and percent < 90:
+                    update_progress(90, "Applying Najs settings and services...")
+                elif b"[2/3]" in recent_output and percent < 15:
+                    update_progress(15, "Downloading and installing the system...")
+                elif b"[1/3]" in recent_output and percent < 5:
+                    update_progress(5, "Preparing package signing keys...")
+
+            while True:
+                readable, _, _ = select.select([backend.stdout], [], [], 2)
+                if readable:
+                    chunk = os.read(backend.stdout.fileno(), 65536)
+                    if chunk:
+                        record_output(chunk)
+                        continue
+                if backend.poll() is not None:
+                    while chunk := os.read(backend.stdout.fileno(), 65536):
+                        record_output(chunk)
+                    break
+                if 15 <= percent < 85:
+                    update_progress(percent + 1, "Downloading and installing the system...")
+
+            result_code = backend.wait()
+            if result_code == 0 and percent < 100:
+                update_progress(100, "Installation completed successfully.")
+    finally:
+        if progress.stdin is not None:
+            try:
+                progress.stdin.close()
+            except BrokenPipeError:
+                pass
+        try:
+            progress.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            progress.terminate()
+            progress.wait()
+
+    if result_code != 0:
+        subprocess.run(
+            [
+                "dialog",
+                "--no-collapse",
+                "--title",
+                "Installation error",
+                "--textbox",
+                str(INSTALL_LOG),
+                "24",
+                "100",
+            ],
+            check=False,
+        )
+        raise RuntimeError(f"installation failed with status {result_code}")
 
 
 def copy_platform_files(target: Path) -> None:
@@ -392,6 +1010,22 @@ def copy_platform_files(target: Path) -> None:
             os.chown(bashrc, home_stat.st_uid, home_stat.st_gid)
 
 
+def configure_hyprland_users(target: Path) -> None:
+    skel = target / "etc/skel/.config"
+    home_root = target / "home"
+    if not home_root.is_dir():
+        return
+    for home in home_root.iterdir():
+        if not home.is_dir():
+            continue
+        home_stat = home.stat()
+        for name in ("hypr", "waybar"):
+            destination = home / ".config" / name
+            shutil.copytree(skel / name, destination, dirs_exist_ok=True)
+            for path in (destination, *destination.rglob("*")):
+                os.chown(path, home_stat.st_uid, home_stat.st_gid)
+
+
 def service_unit(service: str) -> str:
     if service.endswith((".service", ".socket", ".timer")):
         return service
@@ -405,8 +1039,30 @@ def unit_exists(target: Path, unit: str) -> bool:
     )
 
 
+def validate_desktop_target(target: Path, desktop: str) -> str:
+    if desktop not in DESKTOP_REQUIREMENTS:
+        raise RuntimeError(f"unsupported installed desktop: {desktop}")
+    display_manager, sessions = DESKTOP_REQUIREMENTS[desktop]
+    if not unit_exists(target, display_manager):
+        raise RuntimeError(f"required display manager is missing: {display_manager}")
+    if not any((target / session).is_file() for session in sessions):
+        expected = ", ".join(str(session) for session in sessions)
+        raise RuntimeError(f"required desktop session is missing: {expected}")
+    return display_manager
+
+
 def toml_array(values: list[str]) -> str:
     return "[" + ", ".join(json.dumps(value) for value in values) + "]"
+
+
+def brand_systemd_boot_entries(target: Path) -> None:
+    entries = target / "boot/loader/entries"
+    if not entries.is_dir():
+        return
+    for entry in entries.glob("*.conf"):
+        content = entry.read_text(encoding="utf-8")
+        branded = re.sub(r"(?m)^title\s+.*$", "title   Najs", content)
+        entry.write_text(branded, encoding="utf-8")
 
 
 def provision_target(target: Path, config_path: Path) -> None:
@@ -415,16 +1071,25 @@ def provision_target(target: Path, config_path: Path) -> None:
 
     config = load_json(config_path)
     selection = config.get("najs", {})
-    desktop = selection.get("environment", "plasma")
+    desktop = selection.get("environment")
+    required_display_manager = validate_desktop_target(target, desktop)
     session = selection.get("session", "wayland")
     bundles = selection.get("bundles", ["office", "media"])
     enabled_profiles = unique(["desktop", *bundles])
     services = unique([service_unit(service) for service in config.get("services", [])])
+    services.append(required_display_manager)
     services.append("najs-flatpak-setup.timer")
     services = unique(services)
     packages = config.get("packages", [])
     locale = config.get("locale_config", {}).get("sys_lang", "en_US") + ".UTF-8"
     hostname = config.get("hostname", "najs")
+    fsroot = subprocess.run(
+        ["findmnt", "--noheadings", "--output", "FSROOT", str(target)],
+        text=True,
+        capture_output=True,
+        check=False,
+    ).stdout.strip()
+    generation = "initial" if fsroot == "/roots/initial" else "installed"
 
     (target / "usr/bin").mkdir(parents=True, exist_ok=True)
     (target / "usr/share/najs/profiles").mkdir(parents=True, exist_ok=True)
@@ -434,11 +1099,14 @@ def provision_target(target: Path, config_path: Path) -> None:
     for profile in Path("/usr/share/najs/profiles").glob("*.toml"):
         shutil.copy2(profile, target / "usr/share/najs/profiles" / profile.name)
     copy_platform_files(target)
+    if desktop == "hyprland":
+        configure_hyprland_users(target)
     shutil.copy2("/etc/os-release", target / "usr/lib/os-release")
+    brand_systemd_boot_entries(target)
     (target / "etc/issue").write_text("Najs 0.1 Development \\r (\\l)\n", encoding="utf-8")
 
     (target / "etc/najs-release").write_text(
-        'PRETTY_NAME="Najs 0.1 Development"\nNAJS_GENERATION="initial"\n',
+        f'PRETTY_NAME="Najs 0.1 Development"\nNAJS_GENERATION="{generation}"\n',
         encoding="utf-8",
     )
     manifest = f"""version = 1
@@ -476,8 +1144,8 @@ disable = []
     (target / "var/lib/najs").mkdir(parents=True, exist_ok=True)
     installation = {
         "schema": 1,
-        "generation": "initial",
-        "installer": "archinstall",
+        "generation": generation,
+        "installer": selection.get("installer", "archinstall"),
         "selection": selection,
     }
     (target / "var/lib/najs/installation.json").write_text(
@@ -486,6 +1154,125 @@ disable = []
     )
     if os.path.ismount(target / "boot"):
         subprocess.run(["arch-chroot", str(target), "mkinitcpio", "-P"], check=True)
+
+
+def installed_package_names(target: Path) -> set[str]:
+    result = subprocess.run(
+        ["pacman", "--root", str(target), "--query", "--quiet"],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    return set(result.stdout.splitlines())
+
+
+def calamares_provision_target(
+    target: Path,
+    base_config_path: Path,
+    catalog_path: Path,
+) -> None:
+    if os.environ.get("CALAMARES_INSTALL") != "1":
+        raise SystemExit("Calamares provisioning mode is internal to the Najs installer")
+    if os.geteuid() != 0:
+        raise SystemExit("Calamares provisioning requires root")
+
+    packages = installed_package_names(target)
+    desktop_markers = {
+        "kde": "plasma-desktop",
+        "gnome": "gnome-shell",
+        "hyprland": "hyprland",
+        "xfce": "xfce4-session",
+        "cinnamon": "cinnamon",
+    }
+    detected_desktops = [name for name, marker in desktop_markers.items() if marker in packages]
+    if len(detected_desktops) != 1:
+        detected = ", ".join(detected_desktops) if detected_desktops else "none"
+        raise RuntimeError(f"expected exactly one installed desktop, found: {detected}")
+    desktop = detected_desktops[0]
+    kernel = next(
+        (
+            candidate
+            for candidate in ("linux-zen", "linux-lts", "linux-hardened", "linux")
+            if candidate in packages
+        ),
+        "linux",
+    )
+    if "nvidia-utils" in packages:
+        gpu = "nvidia"
+    elif "vulkan-radeon" in packages and "vulkan-intel" not in packages:
+        gpu = "amd"
+    elif "vulkan-intel" in packages and "vulkan-radeon" not in packages:
+        gpu = "intel"
+    else:
+        gpu = "auto"
+
+    bundle_markers = {
+        "office": "libreoffice-fresh",
+        "media": "vlc",
+        "gaming": "steam",
+        "creator": "blender",
+        "development": "code",
+        "communication": "thunderbird",
+        "virtualization": "virt-manager",
+    }
+    bundles = [name for name, marker in bundle_markers.items() if marker in packages]
+    hostname_path = target / "etc/hostname"
+    hostname = hostname_path.read_text(encoding="utf-8").strip() or "najs"
+    locale = "en_US"
+    locale_path = target / "etc/locale.conf"
+    if locale_path.exists():
+        match = re.search(r"^LANG=([A-Za-z_]+)", locale_path.read_text(encoding="utf-8"), re.MULTILINE)
+        if match:
+            locale = match.group(1)
+    keyboard = "us"
+    vconsole_path = target / "etc/vconsole.conf"
+    if vconsole_path.exists():
+        match = re.search(r"^KEYMAP=(\S+)", vconsole_path.read_text(encoding="utf-8"), re.MULTILINE)
+        if match:
+            keyboard = match.group(1)
+    timezone = "UTC"
+    localtime_path = target / "etc/localtime"
+    if localtime_path.is_symlink():
+        localtime_target = localtime_path.readlink().as_posix()
+        marker = "zoneinfo/"
+        if marker in localtime_target:
+            timezone = localtime_target.split(marker, 1)[1]
+    bootloader = "Systemd-boot" if (target / "boot/loader").is_dir() else "Grub"
+
+    config = prepare_config(
+        load_json(base_config_path),
+        load_json(catalog_path),
+        desktop,
+        "minimal",
+        bundles,
+        gpu,
+        hostname,
+        [],
+        kernel,
+        locale,
+        keyboard,
+        timezone,
+        bootloader,
+        True,
+    )
+    filesystem_result = subprocess.run(
+        ["findmnt", "--noheadings", "--output", "FSTYPE", str(target)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    source_result = subprocess.run(
+        ["findmnt", "--noheadings", "--output", "SOURCE", str(target)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    config["najs"]["filesystem"] = filesystem_result.stdout.strip() or "unknown"
+    config["najs"]["encrypted"] = source_result.stdout.strip().startswith("/dev/mapper/")
+    config["najs"]["installer"] = "calamares"
+    generated = Path("/run/najs-install/calamares-config.json")
+    write_config(generated, config)
+    provision_target(target, generated)
 
 
 def parse_args() -> argparse.Namespace:
@@ -504,7 +1291,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gpu", default="auto", help=argparse.SUPPRESS)
     parser.add_argument("--hostname", default="najs", help=argparse.SUPPRESS)
     parser.add_argument("--extra-packages", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--kernel", default="linux", help=argparse.SUPPRESS)
+    parser.add_argument("--locale", default="en_US", help=argparse.SUPPRESS)
+    parser.add_argument("--keyboard", default="us", help=argparse.SUPPRESS)
+    parser.add_argument("--timezone", default="UTC", help=argparse.SUPPRESS)
+    parser.add_argument("--bootloader", default="Systemd-boot", help=argparse.SUPPRESS)
+    parser.add_argument("--no-swap", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--disk", help=argparse.SUPPRESS)
+    parser.add_argument("--disk-size", type=int, help=argparse.SUPPRESS)
+    parser.add_argument("--sector-size", type=int, default=512, help=argparse.SUPPRESS)
+    parser.add_argument("--filesystem", default="btrfs", help=argparse.SUPPRESS)
+    parser.add_argument("--encrypt", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--provision-only", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--calamares-provision", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--backend", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--credentials", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--target", type=Path, default=TARGET, help=argparse.SUPPRESS)
     parser.add_argument("--config", type=Path, default=LIVE_CONFIG, help=argparse.SUPPRESS)
     return parser.parse_args()
@@ -514,6 +1315,12 @@ def main() -> None:
     args = parse_args()
     base_config_path = args.base_config or source_path(LIVE_BASE_CONFIG, "archinstall/config.json")
     catalog_path = args.catalog or source_path(LIVE_CATALOG, "catalog.json")
+
+    if args.backend:
+        if args.credentials is None:
+            raise SystemExit("backend mode requires credentials")
+        run_backend(args.config, args.credentials, args.target)
+        return
 
     if args.generate_config:
         bundle_names = args.bundles.split(",") if args.bundles is not None else None
@@ -526,9 +1333,31 @@ def main() -> None:
             args.gpu,
             args.hostname,
             parse_package_list(args.extra_packages),
+            args.kernel,
+            args.locale,
+            args.keyboard,
+            args.timezone,
+            args.bootloader,
+            not args.no_swap,
         )
+        if args.disk:
+            if args.disk_size is None:
+                raise SystemExit("--disk requires --disk-size")
+            config["disk_config"] = make_disk_config(
+                args.disk,
+                args.disk_size,
+                args.sector_size,
+                args.filesystem,
+                args.encrypt,
+            )
+            config["najs"]["filesystem"] = args.filesystem
+            config["najs"]["encrypted"] = args.encrypt
         write_config(args.generate_config, config)
         print(f"Generated Najs installer configuration: {args.generate_config}")
+        return
+
+    if args.calamares_provision:
+        calamares_provision_target(args.target, base_config_path, catalog_path)
         return
 
     if args.provision_only:
@@ -562,16 +1391,65 @@ def main() -> None:
         selected["gpu"],
         selected["hostname"],
         selected["extra_packages"],
+        selected["kernel"],
+        selected["locale"],
+        selected["keyboard"],
+        selected["timezone"],
+        selected["bootloader"],
+        selected["swap"],
     )
+    disk_info = verify_selected_disk(
+        selected["disk"], selected["disk_size"], selected["disk_identity"]
+    )
+    config["disk_config"] = make_disk_config(
+        selected["disk"],
+        disk_info["size"],
+        disk_info["sector_size"],
+        selected["filesystem"],
+        selected["encrypted"],
+    )
+    config["najs"].update(
+        {
+            "filesystem": selected["filesystem"],
+            "encrypted": selected["encrypted"],
+            "username": selected["username"],
+        }
+    )
+    credentials: dict[str, Any] = {
+        "users": [
+            {
+                "username": selected["username"],
+                "enc_password": hash_password(selected["user_password"]),
+                "sudo": True,
+            }
+        ]
+    }
+    if selected["encryption_password"] is not None:
+        credentials["encryption_password"] = selected["encryption_password"]
+
     write_config(GENERATED_CONFIG, config)
-    initialize_keyring()
-    print("Archinstall will now ask for the disk, locale, user account, and encryption.")
-    print("Review its installation summary carefully before confirming disk changes.")
-    result = subprocess.run(["archinstall", "--config", str(GENERATED_CONFIG)], check=False)
-    if result.returncode != 0:
-        raise SystemExit(f"archinstall exited with status {result.returncode}")
-    provision_target(TARGET, GENERATED_CONFIG)
-    print("Najs is installed. Remove the installation media and reboot.")
+    write_credentials(GENERATED_CREDENTIALS, credentials)
+    try:
+        try:
+            install_with_progress(GENERATED_CONFIG, GENERATED_CREDENTIALS, TARGET)
+        except RuntimeError as error:
+            raise SystemExit(str(error)) from error
+    finally:
+        GENERATED_CREDENTIALS.unlink(missing_ok=True)
+        selected["user_password"] = None
+        selected["encryption_password"] = None
+        credentials.clear()
+    run_dialog(
+        [
+            "--title",
+            "Najs is ready",
+            "--msgbox",
+            "Installation completed successfully.\n\n"
+            "Remove the installation media and restart the computer.",
+            "11",
+            "72",
+        ]
+    )
 
 
 if __name__ == "__main__":

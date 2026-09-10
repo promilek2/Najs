@@ -5,8 +5,7 @@ readonly serial=/dev/ttyS0
 readonly disk_link=/dev/disk/by-id/virtio-NAJS_TEST_DISK
 readonly config_fw=/sys/firmware/qemu_fw_cfg/by_name/opt/najs/install-config/raw
 readonly creds_fw=/sys/firmware/qemu_fw_cfg/by_name/opt/najs/install-creds/raw
-readonly target=/mnt/archinstall
-readonly btrfs_top=/run/najs-install-btrfs
+readonly target=/mnt
 
 exec > >(tee "${serial}") 2>&1
 
@@ -36,40 +35,37 @@ if (( $(blockdev --getsize64 "${disk}") < 32212254720 )); then
 fi
 
 nm-online --quiet --timeout=120
-install -d /run/najs-install "${target}" "${btrfs_top}"
+install -d /run/najs-install
 install -m600 "${config_fw}" /run/najs-install/config.json
 install -m600 "${creds_fw}" /run/najs-install/creds.json
 
-wipefs --all --force "${disk}"
-parted --script "${disk}" \
-  mklabel gpt \
-  mkpart ESP fat32 1MiB 2049MiB \
-  set 1 esp on \
-  name 1 NAJS_ESP \
-  mkpart NAJS_SYSTEM btrfs 2049MiB 100%
-partprobe "${disk}"
-udevadm settle
+config_disk="$(jq -r '.disk_config.device_modifications[0].device // empty' /run/najs-install/config.json)"
+if [[ "${config_disk}" != "${disk}" ]]; then
+  echo "Refusing installation: config targets ${config_disk:-no disk}, expected ${disk}"
+  false
+fi
+if [[ "$(jq -r '.disk_config.device_modifications[0].wipe' /run/najs-install/config.json)" != true ]]; then
+  echo "Refusing installation: test config does not contain the expected full-disk layout"
+  false
+fi
 
-readonly esp="${disk_link}-part1"
-readonly system="${disk_link}-part2"
-mkfs.fat -F 32 -n NAJS_ESP "${esp}"
-mkfs.btrfs --force --label NAJS_SYSTEM "${system}"
-
-mount "${system}" "${btrfs_top}"
-install -d "${btrfs_top}/roots"
-for subvolume in roots/initial home var-log var-cache var-tmp snapshots; do
-  btrfs subvolume create "${btrfs_top}/${subvolume}"
-done
-umount "${btrfs_top}"
-
-mount -o subvol=roots/initial,compress=zstd,noatime "${system}" "${target}"
-install -d "${target}/boot" "${target}/home" "${target}/var/log" \
-  "${target}/var/cache" "${target}/var/tmp"
-mount "${esp}" "${target}/boot"
-mount -o subvol=home,compress=zstd,noatime "${system}" "${target}/home"
-mount -o subvol=var-log,compress=zstd,noatime "${system}" "${target}/var/log"
-mount -o subvol=var-cache,compress=zstd,noatime "${system}" "${target}/var/cache"
-mount -o subvol=var-tmp,compress=zstd,noatime "${system}" "${target}/var/tmp"
+root_id="$(jq -r '.disk_config.device_modifications[0].partitions[] | select(.mountpoint == null) | .obj_id' /run/najs-install/config.json)"
+encryption_password="$(openssl rand -hex 32)"
+jq --arg root_id "${root_id}" \
+  '.disk_config.disk_encryption = {encryption_type: "luks", partitions: [$root_id], lvm_volumes: []}' \
+  /run/najs-install/config.json >/run/najs-install/encrypted-config.json
+jq --arg password "${encryption_password}" \
+  '.encryption_password = $password' \
+  /run/najs-install/creds.json >/run/najs-install/encrypted-creds.json
+chmod 600 /run/najs-install/encrypted-creds.json
+archinstall \
+  --config /run/najs-install/encrypted-config.json \
+  --creds /run/najs-install/encrypted-creds.json \
+  --silent \
+  --dry-run
+rm -f /run/najs-install/encrypted-config.json /run/najs-install/encrypted-creds.json
+unset encryption_password
+echo "NAJS_VM_LUKS_CONFIG_OK"
 
 pacman-key --init
 pacman-key --populate archlinux
@@ -77,15 +73,6 @@ archinstall \
   --config /run/najs-install/config.json \
   --creds /run/najs-install/creds.json \
   --silent
-
-if ! mountpoint --quiet "${target}"; then
-  mount -o subvol=roots/initial,compress=zstd,noatime "${system}" "${target}"
-fi
-mountpoint --quiet "${target}/boot" || mount "${esp}" "${target}/boot"
-mountpoint --quiet "${target}/home" || mount -o subvol=home,compress=zstd,noatime "${system}" "${target}/home"
-mountpoint --quiet "${target}/var/log" || mount -o subvol=var-log,compress=zstd,noatime "${system}" "${target}/var/log"
-mountpoint --quiet "${target}/var/cache" || mount -o subvol=var-cache,compress=zstd,noatime "${system}" "${target}/var/cache"
-mountpoint --quiet "${target}/var/tmp" || mount -o subvol=var-tmp,compress=zstd,noatime "${system}" "${target}/var/tmp"
 NAJS_INSTALL_TEST=1 /usr/local/bin/najs-install \
   --provision-only \
   --target "${target}" \

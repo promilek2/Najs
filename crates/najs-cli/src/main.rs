@@ -1,13 +1,25 @@
 use std::collections::BTreeSet;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
-use clap::{Parser, Subcommand};
-use serde::Deserialize;
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{Shell, generate};
+use serde::{Deserialize, Serialize};
 
 const DEFAULT_MANIFEST: &str = "/etc/najs/manifest.toml";
+const SUPPORTED_PROFILES: &[&str] = &[
+    "communication",
+    "creator",
+    "desktop",
+    "development",
+    "gaming",
+    "media",
+    "office",
+    "virtualization",
+];
 
 #[derive(Debug, Parser)]
 #[command(name = "najs", version, about = "Manage a Najs system")]
@@ -23,7 +35,11 @@ enum Commands {
     /// Show whether core Najs facilities are available.
     Status,
     /// Diagnose the running Najs platform without changing it.
-    Doctor,
+    Doctor {
+        /// Emit a machine-readable report.
+        #[arg(long)]
+        json: bool,
+    },
     /// Validate a system manifest without changing the system.
     Validate {
         #[arg(short, long, default_value = DEFAULT_MANIFEST)]
@@ -33,6 +49,11 @@ enum Commands {
     Diff {
         #[arg(short, long, default_value = DEFAULT_MANIFEST)]
         manifest: PathBuf,
+    },
+    /// Generate shell completion definitions.
+    Completions {
+        #[arg(value_enum)]
+        shell: Shell,
     },
 }
 
@@ -100,7 +121,7 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::Info => info(),
         Commands::Status => status(),
-        Commands::Doctor => doctor(),
+        Commands::Doctor { json } => doctor(json),
         Commands::Validate { manifest } => {
             let manifest = load_manifest(&manifest)?;
             validate_manifest(&manifest)?;
@@ -108,7 +129,15 @@ fn main() -> Result<()> {
             Ok(())
         }
         Commands::Diff { manifest } => diff(&manifest),
+        Commands::Completions { shell } => {
+            write_completions(shell, &mut std::io::stdout());
+            Ok(())
+        }
     }
+}
+
+fn write_completions<W: Write>(shell: Shell, writer: &mut W) {
+    generate(shell, &mut Cli::command(), "najs", writer);
 }
 
 fn info() -> Result<()> {
@@ -129,6 +158,16 @@ fn info() -> Result<()> {
 }
 
 fn status() -> Result<()> {
+    let root_filesystem = command_output("findmnt", &["--noheadings", "--output", "FSTYPE", "/"])
+        .map(|value| value.trim().to_owned())
+        .unwrap_or_else(|| "unknown".to_owned());
+    let root_subvolume = command_output("findmnt", &["--noheadings", "--output", "FSROOT", "/"])
+        .map(|value| value.trim().to_owned())
+        .unwrap_or_else(|| "unknown".to_owned());
+    let boot_manager = detect_boot_manager();
+    let release = fs::read_to_string("/etc/najs-release").unwrap_or_default();
+    let generation = release_value(&release, "NAJS_GENERATION").unwrap_or("unknown");
+
     println!(
         "system: {}",
         if Path::new("/etc/najs-release").exists() {
@@ -144,78 +183,125 @@ fn status() -> Result<()> {
     println!("btrfs tools: {}", command_exists("btrfs"));
     println!("pacman: {}", command_exists("pacman"));
     println!("systemd: {}", command_exists("systemctl"));
+    println!("root filesystem: {root_filesystem}");
+    println!("root subvolume: {root_subvolume}");
+    println!("boot manager: {boot_manager}");
+    println!("generation: {generation}");
+    let readiness = generation_readiness(&root_filesystem, &root_subvolume, boot_manager);
+    println!("generation prerequisites: {readiness}");
+    println!("transactions: unavailable (planned for M3)");
     Ok(())
 }
 
-fn doctor() -> Result<()> {
-    let mut failures = 0;
+#[derive(Serialize)]
+struct DoctorCheck {
+    name: &'static str,
+    passed: bool,
+}
+
+#[derive(Serialize)]
+struct DoctorReport<'a> {
+    system: &'a str,
+    generation: &'a str,
+    ok: bool,
+    checks: Vec<DoctorCheck>,
+}
+
+fn doctor(json: bool) -> Result<()> {
     let release = fs::read_to_string("/etc/najs-release").unwrap_or_default();
     let generation = release_value(&release, "NAJS_GENERATION").unwrap_or("unknown");
-
-    doctor_check(
-        &mut failures,
-        "release metadata",
-        Path::new("/etc/najs-release").is_file(),
-    );
-    doctor_check(
-        &mut failures,
-        "system manifest",
-        load_manifest(Path::new(DEFAULT_MANIFEST))
-            .and_then(|manifest| validate_manifest(&manifest))
-            .is_ok(),
-    );
-    doctor_check(&mut failures, "pacman backend", command_available("pacman"));
-    doctor_check(&mut failures, "systemd", command_available("systemctl"));
-    doctor_check(
-        &mut failures,
-        "NetworkManager",
-        command_success("systemctl", &["is-active", "NetworkManager.service"]),
-    );
-    doctor_check(
-        &mut failures,
-        "display manager",
-        command_success("systemctl", &["is-active", "display-manager.service"]),
-    );
-    doctor_check(
-        &mut failures,
-        "UEFI runtime",
-        Path::new("/sys/firmware/efi").is_dir(),
-    );
-    doctor_check(
-        &mut failures,
-        "Najs Fold assets",
-        Path::new("/usr/share/icons/hicolor/scalable/apps/najs.svg").is_file()
-            && Path::new("/usr/share/wallpapers/Najs/contents/images/2560x1600.png").is_file(),
-    );
-    doctor_check(
-        &mut failures,
-        "Fastfetch integration",
-        command_available("fastfetch") && Path::new("/etc/xdg/fastfetch/config.jsonc").is_file(),
-    );
+    let mut checks = vec![
+        DoctorCheck {
+            name: "release metadata",
+            passed: Path::new("/etc/najs-release").is_file(),
+        },
+        DoctorCheck {
+            name: "system manifest",
+            passed: load_manifest(Path::new(DEFAULT_MANIFEST))
+                .and_then(|manifest| validate_manifest(&manifest))
+                .is_ok(),
+        },
+        DoctorCheck {
+            name: "pacman backend",
+            passed: command_available("pacman"),
+        },
+        DoctorCheck {
+            name: "systemd",
+            passed: command_available("systemctl"),
+        },
+        DoctorCheck {
+            name: "NetworkManager",
+            passed: command_success("systemctl", &["is-active", "NetworkManager.service"]),
+        },
+        DoctorCheck {
+            name: "display manager",
+            passed: command_success("systemctl", &["is-active", "display-manager.service"]),
+        },
+        DoctorCheck {
+            name: "UEFI runtime",
+            passed: Path::new("/sys/firmware/efi").is_dir(),
+        },
+        DoctorCheck {
+            name: "Najs Fold assets",
+            passed: Path::new("/usr/share/icons/hicolor/scalable/apps/najs.svg").is_file()
+                && Path::new("/usr/share/wallpapers/Najs/contents/images/2560x1600.png").is_file(),
+        },
+        DoctorCheck {
+            name: "Fastfetch integration",
+            passed: command_available("fastfetch")
+                && Path::new("/etc/xdg/fastfetch/config.jsonc").is_file()
+                && Path::new("/usr/share/najs/fastfetch/logo.txt").is_file(),
+        },
+    ];
 
     if generation == "initial" {
         let root_is_initial =
             command_output("findmnt", &["--noheadings", "--output", "FSROOT", "/"])
                 .is_some_and(|root| root.trim() == "/roots/initial");
-        doctor_check(&mut failures, "generation root", root_is_initial);
+        checks.push(DoctorCheck {
+            name: "generation root",
+            passed: root_is_initial,
+        });
+    }
+
+    let failures = checks.iter().filter(|check| !check.passed).count();
+    if json {
+        let report = DoctorReport {
+            system: if release.is_empty() {
+                "development host"
+            } else {
+                "Najs"
+            },
+            generation,
+            ok: failures == 0,
+            checks,
+        };
+        serde_json::to_writer_pretty(std::io::stdout(), &report)?;
+        println!();
     } else {
-        println!("[info] generation: {generation}");
+        for check in checks {
+            doctor_check(check.name, check.passed);
+        }
+        if generation != "initial" {
+            println!("[info] generation: {generation}");
+        }
     }
 
     if failures == 0 {
-        println!("doctor: all checks passed");
+        if !json {
+            println!("doctor: all checks passed");
+        }
         Ok(())
     } else {
         bail!("doctor found {failures} failed check(s)")
     }
 }
 
-fn doctor_check(failures: &mut usize, name: &str, passed: bool) {
+fn doctor_check(name: &str, passed: bool) {
     if passed {
         println!("[ok]   {name}");
     } else {
         println!("[fail] {name}");
-        *failures += 1;
     }
 }
 
@@ -227,22 +313,89 @@ fn release_value<'a>(contents: &'a str, key: &str) -> Option<&'a str> {
         .map(|value| value.trim_matches('"'))
 }
 
+fn detect_boot_manager() -> &'static str {
+    if Path::new("/boot/loader/loader.conf").is_file() || Path::new("/boot/loader/entries").is_dir()
+    {
+        "systemd-boot"
+    } else if Path::new("/boot/grub/grub.cfg").is_file() {
+        "GRUB"
+    } else {
+        "unknown"
+    }
+}
+
+fn generation_readiness(
+    root_filesystem: &str,
+    root_subvolume: &str,
+    boot_manager: &str,
+) -> &'static str {
+    if root_filesystem != "btrfs" {
+        "unavailable (root filesystem is not Btrfs)"
+    } else if !root_subvolume.starts_with("/roots/") {
+        "unavailable (root is not a Najs generation subvolume)"
+    } else if boot_manager != "systemd-boot" {
+        "unavailable (systemd-boot is required)"
+    } else {
+        "available"
+    }
+}
+
 fn diff(path: &Path) -> Result<()> {
     let manifest = load_manifest(path)?;
     validate_manifest(&manifest)?;
 
-    let installed = command_lines("pacman", &["-Qq"]);
-    let enabled_services = manifest
+    let manages_services = !manifest.services.enable.is_empty()
+        || !manifest.services.disable.is_empty()
+        || manifest.features.bluetooth.is_some()
+        || manifest.features.printing.is_some();
+    if manages_services && !command_available("systemctl") {
+        bail!("systemctl is unavailable; cannot compare managed services");
+    }
+    if (!manifest.packages.install.is_empty() || !manifest.packages.remove.is_empty())
+        && !command_available("pacman")
+    {
+        bail!("pacman is unavailable; cannot compare managed packages");
+    }
+
+    let installed =
+        if manifest.packages.install.is_empty() && manifest.packages.remove.is_empty() {
+            Vec::new()
+        } else {
+            command_lines("pacman", &["-Qq"])
+                .context("pacman query failed; package differences are unknown")?
+        }
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let mut services_to_enable = manifest
         .services
         .enable
         .iter()
         .filter(|service| !command_success("systemctl", &["is-enabled", service]))
-        .collect::<Vec<_>>();
-
-    let installed = installed
-        .unwrap_or_default()
-        .into_iter()
+        .map(String::as_str)
         .collect::<BTreeSet<_>>();
+    let mut services_to_disable = manifest
+        .services
+        .disable
+        .iter()
+        .filter(|service| command_success("systemctl", &["is-enabled", service]))
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+
+    for (feature, service) in [
+        (manifest.features.bluetooth, "bluetooth.service"),
+        (manifest.features.printing, "cups.service"),
+    ] {
+        match feature {
+            Some(true) if !command_success("systemctl", &["is-enabled", service]) => {
+                services_to_enable.insert(service);
+            }
+            Some(false) if command_success("systemctl", &["is-enabled", service]) => {
+                services_to_disable.insert(service);
+            }
+            _ => {}
+        }
+    }
+
     let missing_packages = manifest
         .packages
         .install
@@ -261,11 +414,52 @@ fn diff(path: &Path) -> Result<()> {
             .map(|current| current.trim() != wanted.as_str())
             .unwrap_or(true)
     });
+    let locale_change = manifest.system.locale.as_ref().filter(|wanted| {
+        fs::read_to_string("/etc/locale.conf")
+            .ok()
+            .and_then(|current| release_value(&current, "LANG").map(str::to_owned))
+            .is_none_or(|current| current != wanted.as_str())
+    });
+
+    let current_manifest =
+        if path != Path::new(DEFAULT_MANIFEST) && Path::new(DEFAULT_MANIFEST).is_file() {
+            let current = load_manifest(Path::new(DEFAULT_MANIFEST))
+                .context("failed to load the active Najs manifest")?;
+            validate_manifest(&current).context("the active Najs manifest is invalid")?;
+            Some(current)
+        } else {
+            None
+        };
+    let desktop_change = current_manifest.as_ref().is_some_and(|current| {
+        current.desktop.environment != manifest.desktop.environment
+            || current.desktop.session != manifest.desktop.session
+    });
+    let (profiles_to_enable, profiles_to_disable) = if let Some(current) = &current_manifest {
+        let current_profiles = current.profiles.enabled.iter().collect::<BTreeSet<_>>();
+        let wanted_profiles = manifest.profiles.enabled.iter().collect::<BTreeSet<_>>();
+        (
+            wanted_profiles
+                .difference(&current_profiles)
+                .copied()
+                .collect::<Vec<_>>(),
+            current_profiles
+                .difference(&wanted_profiles)
+                .copied()
+                .collect::<Vec<_>>(),
+        )
+    } else {
+        (Vec::new(), Vec::new())
+    };
 
     if missing_packages.is_empty()
         && packages_to_remove.is_empty()
-        && enabled_services.is_empty()
+        && services_to_enable.is_empty()
+        && services_to_disable.is_empty()
         && hostname_change.is_none()
+        && locale_change.is_none()
+        && !desktop_change
+        && profiles_to_enable.is_empty()
+        && profiles_to_disable.is_empty()
     {
         println!("no managed changes");
         return Ok(());
@@ -274,14 +468,35 @@ fn diff(path: &Path) -> Result<()> {
     if let Some(hostname) = hostname_change {
         println!("hostname: -> {hostname}");
     }
+    if let Some(locale) = locale_change {
+        println!("locale: -> {locale}");
+    }
+    if desktop_change {
+        let environment = manifest
+            .desktop
+            .environment
+            .as_deref()
+            .unwrap_or("unchanged");
+        let session = manifest.desktop.session.as_deref().unwrap_or("unchanged");
+        println!("desktop: -> {environment}/{session}");
+    }
+    for profile in profiles_to_enable {
+        println!("profile: +{profile}");
+    }
+    for profile in profiles_to_disable {
+        println!("profile: -{profile}");
+    }
     for package in missing_packages {
         println!("package: +{package}");
     }
     for package in packages_to_remove {
         println!("package: -{package}");
     }
-    for service in enabled_services {
+    for service in services_to_enable {
         println!("service: enable {service}");
+    }
+    for service in services_to_disable {
+        println!("service: disable {service}");
     }
     Ok(())
 }
@@ -316,6 +531,35 @@ fn validate_manifest(manifest: &Manifest) -> Result<()> {
             .chain(&manifest.services.disable),
     )?;
     validate_names("profile", manifest.profiles.enabled.iter())?;
+    validate_unique("installed package", &manifest.packages.install)?;
+    validate_unique("removed package", &manifest.packages.remove)?;
+    validate_unique("enabled service", &manifest.services.enable)?;
+    validate_unique("disabled service", &manifest.services.disable)?;
+    validate_unique("profile", &manifest.profiles.enabled)?;
+    validate_disjoint(
+        "package",
+        "install",
+        &manifest.packages.install,
+        "remove",
+        &manifest.packages.remove,
+    )?;
+    validate_disjoint(
+        "service",
+        "enable",
+        &manifest.services.enable,
+        "disable",
+        &manifest.services.disable,
+    )?;
+    for profile in &manifest.profiles.enabled {
+        if !SUPPORTED_PROFILES.contains(&profile.as_str()) {
+            bail!("unsupported profile: {profile}");
+        }
+    }
+    if let Some(hostname) = &manifest.system.hostname
+        && !valid_hostname(hostname)
+    {
+        bail!("invalid hostname: {hostname:?}");
+    }
     if let Some(environment) = &manifest.desktop.environment
         && !["plasma", "gnome", "hyprland", "xfce", "cinnamon"].contains(&environment.as_str())
     {
@@ -327,12 +571,76 @@ fn validate_manifest(manifest: &Manifest) -> Result<()> {
         bail!("unsupported desktop session: {session}");
     }
     if let Some(locale) = &manifest.system.locale
-        && locale.trim().is_empty()
+        && (locale.is_empty()
+            || !locale
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || "_.@-".contains(ch)))
     {
-        bail!("locale cannot be empty");
+        bail!("invalid locale: {locale:?}");
     }
-    let _ = (manifest.features.bluetooth, manifest.features.printing);
+    for (feature, service) in [
+        (manifest.features.bluetooth, "bluetooth.service"),
+        (manifest.features.printing, "cups.service"),
+    ] {
+        if feature == Some(false)
+            && manifest
+                .services
+                .enable
+                .iter()
+                .any(|enabled| enabled == service)
+        {
+            bail!("feature disables {service}, but the service is also enabled");
+        }
+        if feature == Some(true)
+            && manifest
+                .services
+                .disable
+                .iter()
+                .any(|disabled| disabled == service)
+        {
+            bail!("feature enables {service}, but the service is also disabled");
+        }
+    }
     Ok(())
+}
+
+fn validate_unique(kind: &str, values: &[String]) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    for value in values {
+        if !seen.insert(value) {
+            bail!("duplicate {kind}: {value}");
+        }
+    }
+    Ok(())
+}
+
+fn validate_disjoint(
+    kind: &str,
+    left_action: &str,
+    left: &[String],
+    right_action: &str,
+    right: &[String],
+) -> Result<()> {
+    let right = right.iter().collect::<BTreeSet<_>>();
+    if let Some(conflict) = left.iter().find(|value| right.contains(value)) {
+        bail!("cannot {left_action} and {right_action} the same {kind}: {conflict}");
+    }
+    Ok(())
+}
+
+fn valid_hostname(hostname: &str) -> bool {
+    (1..=63).contains(&hostname.len())
+        && hostname
+            .bytes()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == b'-')
+        && hostname
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphanumeric)
+        && hostname
+            .as_bytes()
+            .last()
+            .is_some_and(u8::is_ascii_alphanumeric)
 }
 
 fn validate_names<'a>(kind: &str, names: impl Iterator<Item = &'a String>) -> Result<()> {
@@ -454,6 +762,63 @@ mod tests {
     }
 
     #[test]
+    fn rejects_unknown_and_duplicate_profiles() {
+        let unknown: Manifest =
+            toml::from_str("version = 1\n[profiles]\nenabled = [\"magic\"]").unwrap();
+        assert!(validate_manifest(&unknown).is_err());
+
+        let duplicate: Manifest =
+            toml::from_str("version = 1\n[profiles]\nenabled = [\"development\", \"development\"]")
+                .unwrap();
+        assert!(validate_manifest(&duplicate).is_err());
+    }
+
+    #[test]
+    fn rejects_conflicting_package_and_service_operations() {
+        let packages: Manifest = toml::from_str(
+            "version = 1\n[packages]\ninstall = [\"firefox\"]\nremove = [\"firefox\"]",
+        )
+        .unwrap();
+        assert!(validate_manifest(&packages).is_err());
+
+        let services: Manifest = toml::from_str(
+            "version = 1\n[services]\nenable = [\"cups.service\"]\ndisable = [\"cups.service\"]",
+        )
+        .unwrap();
+        assert!(validate_manifest(&services).is_err());
+    }
+
+    #[test]
+    fn rejects_feature_service_conflicts() {
+        let manifest: Manifest = toml::from_str(
+            "version = 1\n[features]\nprinting = false\n[services]\nenable = [\"cups.service\"]",
+        )
+        .unwrap();
+        assert!(validate_manifest(&manifest).is_err());
+    }
+
+    #[test]
+    fn validates_hostnames() {
+        for hostname in ["najs", "gaming-pc", "najs42"] {
+            assert!(valid_hostname(hostname));
+        }
+        for hostname in ["", "-najs", "najs-", "najs.local", "najs pc"] {
+            assert!(!valid_hostname(hostname));
+        }
+    }
+
+    #[test]
+    fn reports_generation_prerequisite_reasons() {
+        assert_eq!(
+            generation_readiness("btrfs", "/roots/initial", "systemd-boot"),
+            "available"
+        );
+        assert!(generation_readiness("ext4", "/", "systemd-boot").contains("not Btrfs"));
+        assert!(generation_readiness("btrfs", "/", "systemd-boot").contains("subvolume"));
+        assert!(generation_readiness("btrfs", "/roots/initial", "GRUB").contains("systemd-boot"));
+    }
+
+    #[test]
     fn reads_quoted_release_values() {
         let release = "PRETTY_NAME=\"Najs\"\nNAJS_GENERATION=\"initial\"\n";
         assert_eq!(release_value(release, "NAJS_GENERATION"), Some("initial"));
@@ -462,5 +827,17 @@ mod tests {
     #[test]
     fn reports_missing_release_values() {
         assert_eq!(release_value("PRETTY_NAME=Najs\n", "NAJS_GENERATION"), None);
+    }
+
+    #[test]
+    fn generates_completions_for_supported_shells() {
+        for shell in [Shell::Bash, Shell::Zsh, Shell::Fish] {
+            let mut output = Vec::new();
+            write_completions(shell, &mut output);
+            let output = String::from_utf8(output).unwrap();
+            assert!(output.contains("najs"));
+            assert!(output.contains("doctor"));
+            assert!(output.contains("completions"));
+        }
     }
 }

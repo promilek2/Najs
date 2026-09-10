@@ -1,7 +1,22 @@
-$1        NN        NN
-$1        NNNN      NN
-$1        NN  NN    NN
-$1        NN    NN  NN
-$1        NN      NNNN
-$1        NN        NN
-$2          NAJS FOLD
+$2
+$2     ____,.____-|_yO__.                       ___+  !  . _  _  _
+$2     `O_^TT~^'  `  !T7PR*_                 _-PT~ `    ` `!`_P`
+$2       ^_        ____   `^*_             _4^``` ____         ^`
+$2        `N_     _OO^OR    `A`           `K`    _4KOOO       `
+$2         `:     mgg____    `hr           `    ``h_gmmm>   :
+$2           `     `Hrcr`     ``          `      tbzzr```
+$3
+$3                 , _*_-____,               ;_|w)N|* _
+$3           ,_;rr:` ``````r`qs+         :mr ` ````````n..
+$3      z|zHzS``     ;wzL.   ``mg        b`    :mzbz,       rcgprc
+$3      ``dL        zbz`r`c    `or      ``    tbz`dzb        zc``
+$3         ~Bw      5@zzzzzr                   EbzE@@@!    zF~
+$3           `~.     ~FF~`                     `~~~~     :`
+$4
+$4
+$4           ____v___gr                            _*vmm*y_g
+$4         _pmzc``````zL,                       .ubr`  ````d&mw,
+$4       zHr``   .     ~`                       ``       ..  ``|
+$4     zB~`  zz@BY[.                                  :d5BzSL
+$4    ]~     @@Zu@@E`                           .     |Z]ZZ@E
+$4          `====F~                                    ~====F=

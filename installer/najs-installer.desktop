@@ -1,8 +1,12 @@
 [Desktop Entry]
 Type=Application
-Name=Install Najs
-Comment=Install Najs on this computer
+Name=Cocky Installer
+GenericName=System Installer
+Comment=Install Najs with advanced storage and software options
 Exec=konsole -e sudo /usr/local/bin/najs-install
 Icon=najs
 Terminal=false
 Categories=System;
+Keywords=install;system;disk;setup;
+StartupNotify=true
+X-KDE-StartupNotify=true

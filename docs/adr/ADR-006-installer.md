@@ -1,6 +1,6 @@
 # ADR-006: Archinstall for the installation prototype
 
-- Status: accepted for pre-alpha
+- Status: restored as the primary UI by ADR-009
 - Date: 2026-09-01
 
 ## Problem
@@ -19,23 +19,24 @@ A new installer would duplicate risky partitioning and encryption work.
 ## Decision
 
 Use the signed upstream Archinstall package for the pre-alpha installation
-prototype. Najs supplies a non-secret catalog and an easy selection wizard that
-generates the preset. Archinstall owns disk, filesystem, bootloader, account, and
-package operations. After a successful installation, the wrapper provisions the
-Najs release metadata, manifest, profiles, welcome center, and CLI into the
-mounted target.
+backend. The Najs wizard collects disk, filesystem, encryption, account, locale,
+desktop, and package choices, then generates configuration and invokes
+Archinstall in silent mode. Archinstall still owns disk, filesystem, bootloader,
+account, and package operations. After a successful installation, the wrapper
+provisions the Najs release metadata, manifest, profiles, welcome center, and CLI
+into the mounted target.
 
-No credential file is stored in the ISO or repository. Disk and user choices
-remain interactive. The wrapper refuses non-UEFI installation in this phase.
+No credential file is stored in the ISO or repository. The temporary credential
+file is root-only and removed after success or failure. The wrapper refuses
+non-UEFI installation in this phase and requires an explicit full-disk
+erase-and-install confirmation.
 
 ## Consequences
 
-The prototype is a terminal installer launched from the desktop, not the final
-Najs installation experience. Its generated Btrfs layout is an installation
-baseline; generation activation remains disabled until the layout and UKI pair
-are verified after installation. Calamares can be reconsidered after Najs has a
-signed package repository, or replaced by a focused graphical frontend over a
-stable installation backend.
+The terminal installer is launched from the desktop as Cocky Installer. Its
+generated Btrfs layout is an installation baseline; generation activation
+remains disabled until the layout and UKI pair are verified after installation.
+Calamares remains available as an optional advanced frontend.
 
 ## Sources
 

@@ -10,7 +10,7 @@ fi
 
 open_settings() {
   local command
-  for command in systemsettings gnome-control-center cinnamon-settings xfce4-settings-manager nwg-look; do
+  for command in systemsettings gnome-control-center cinnamon-settings xfce4-settings-manager najs-hyprland-settings; do
     if command -v "${command}" >/dev/null 2>&1; then
       "${command}" >/dev/null 2>&1 &
       return

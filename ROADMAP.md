@@ -3,6 +3,8 @@
 ## M0: foundation (verified)
 
 - Rust CLI, strict manifest parser, and read-only diff.
+- Semantic conflict detection, trustworthy backend errors, generation readiness,
+  and machine-readable diagnostics.
 - Archiso Plasma/Wayland live profile.
 - Isolated build tooling and UEFI VM smoke-test entry point.
 
@@ -20,7 +22,9 @@ hardware, and complete visual review of the integrated Najs Fold identity.
 
 - Archinstall integration with Najs provisioning, Btrfs, and systemd-boot.
 - Automated blank-disk QEMU install and reboot test (verified baseline).
-- Easy desktop, graphics, use-case, and application-group selection wizard.
+- Branded Calamares GUI with advanced storage, boot, desktop, graphics, kernel,
+  account, localization, and application-group choices, retained as optional.
+- Cocky Installer dialog launcher placed directly on the live desktop.
 - KDE Plasma, GNOME, Hyprland, Xfce, and Cinnamon installation profiles.
 
 ## M3: transactions and generations
